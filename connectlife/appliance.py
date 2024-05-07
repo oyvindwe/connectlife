@@ -2,9 +2,11 @@ import datetime as dt
 from typing import Dict
 
 DISHWASHER = "dishwasher"
+REFRIGERATOR = "refrigerator"
 UNKNOWN = "unknown"
 DEVICE_TYPES = {
-    "015": DISHWASHER
+    "015": DISHWASHER,
+    "026": REFRIGERATOR
 }
 
 class ConnectLifeAppliance:
@@ -29,7 +31,7 @@ class ConnectLifeAppliance:
         self._use_time = dt.datetime.fromtimestamp(data["useTime"]/1000) if data["useTime"] else None
         self._create_time = dt.datetime.fromtimestamp(data["createTime"]/1000) if data["createTime"] else None
         self._status_list = {k:int(v) if type(v) == str and v.isdigit() else v for k,v in data["statusList"].items()}
-        self._device_type = DEVICE_TYPES[data[self._device_type_code]] if self._device_type_code in DEVICE_TYPES else UNKNOWN
+        self._device_type = DEVICE_TYPES[self._device_type_code] if self._device_type_code in DEVICE_TYPES else UNKNOWN
 
     @property
     def wifi_id(self) -> str:
