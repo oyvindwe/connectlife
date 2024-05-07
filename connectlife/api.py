@@ -76,7 +76,6 @@ class ConnectLifeApi():
                 "User-Agent": "connectlife-api-connector 2.1.4",
                 "X-Token": self._access_token
             }) as response:
-                print(response.headers)
                 return await response.json()
 
 
