@@ -20,7 +20,7 @@ OAUTH2_TOKEN = "https://oauth.hijuconn.com/oauth/token"
 
 APPLIANCES_URL = "https://connectlife.bapi.ovh/appliances"
 
-_LOGGER = logging.getLogger("connectlife")
+_LOGGER = logging.getLogger(__name__)
 
 
 class LifeConnectError(Exception):
