@@ -1,12 +1,32 @@
 import datetime as dt
+from enum import StrEnum
 from typing import Dict
 
-DISHWASHER = "dishwasher"
-REFRIGERATOR = "refrigerator"
-UNKNOWN = "unknown"
+
+class DeviceType(StrEnum):
+    """Known device types."""
+    DISHWASHER = "dishwasher"
+    HOB = "hob"
+    HEAT_PUMP = "heat_pump"
+    HOOD = "hood"
+    OVEN = "oven"
+    REFRIGERATOR = "refrigerator"
+    TUMBLE_DRYER = "tumble_dryer"
+    WASHING_MACHINE = "washing_machine"
+    UNKNOWN = "unknown"
+
 DEVICE_TYPES = {
-    "015": DISHWASHER,
-    "026": REFRIGERATOR
+    "003": DeviceType.WASHING_MACHINE,
+    "004": DeviceType.TUMBLE_DRYER,
+    "010": DeviceType.HOOD,
+    "013": DeviceType.OVEN,
+    "015": DeviceType.DISHWASHER,
+    "016": DeviceType.HEAT_PUMP,
+    "020": DeviceType.HOOD,
+    "021": DeviceType.HOOD,
+    "023": DeviceType.OVEN,
+    "026": DeviceType.REFRIGERATOR,
+    "027": DeviceType.WASHING_MACHINE,
 }
 
 class ConnectLifeAppliance:
@@ -31,7 +51,9 @@ class ConnectLifeAppliance:
         self._use_time = dt.datetime.fromtimestamp(data["useTime"]/1000) if data["useTime"] else None
         self._create_time = dt.datetime.fromtimestamp(data["createTime"]/1000) if data["createTime"] else None
         self._status_list = {k:int(v) if type(v) == str and v.isdigit() else v for k,v in data["statusList"].items()}
-        self._device_type = DEVICE_TYPES[self._device_type_code] if self._device_type_code in DEVICE_TYPES else UNKNOWN
+        self._device_type = DEVICE_TYPES[self._device_type_code] \
+            if self._device_type_code in DEVICE_TYPES \
+            else DeviceType.UNKNOWN
 
     @property
     def wifi_id(self) -> str:
@@ -82,7 +104,7 @@ class ConnectLifeAppliance:
         return self._room_name
 
     @property
-    def status_list(self) -> Dict[str, str | int]:
+    def status_list(self) -> Dict[str, str | int | dt.datetime]:
         return self._status_list
 
     @property
@@ -100,3 +122,7 @@ class ConnectLifeAppliance:
     @property
     def create_time(self) -> dt.datetime | None:
         return self._create_time
+
+    @property
+    def device_type(self) -> DeviceType:
+        return self._device_type
