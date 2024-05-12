@@ -20,6 +20,11 @@ async def main():
 
     api = ConnectLifeApi(args.username, args.password)
     appliances = await api.get_appliances_json()
+    # Redact private fields
+    for appliance in appliances:
+        appliance["deviceId"] = "<redacted>"
+        appliance["puid"] = "<redacted>"
+        appliance["wifiId"] = "<redacted>"
     print(json.dumps([order_dict(a) for a in appliances], indent=2))
 
 if __name__ == "__main__":
