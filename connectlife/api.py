@@ -64,7 +64,7 @@ class ConnectLifeApi():
     async def get_appliances(self) -> Any:
         """Make a request."""
         appliances = await self.get_appliances_json()
-        self.appliances = [ConnectLifeAppliance(self, a) for a in appliances]
+        self.appliances = [ConnectLifeAppliance(self, a) for a in appliances if "deviceId" in a]
         return self.appliances
 
 
@@ -76,6 +76,11 @@ class ConnectLifeApi():
                 "User-Agent": "connectlife-api-connector 2.1.4",
                 "X-Token": self._access_token
             }) as response:
+                if response.status != 200:
+                    _LOGGER.debug(f"Response status code: {response.status}")
+                    _LOGGER.debug(response.headers)
+                    _LOGGER.debug(await response.text())
+                    raise LifeConnectError(f"Unexpected response: status={response.status}")
                 return await response.json()
 
 
@@ -93,7 +98,11 @@ class ConnectLifeApi():
                 "password": self._password,
                 "APIKey": API_KEY,
             }) as response:
-                _LOGGER.debug(response.status)
+                if response.status != 200:
+                    _LOGGER.debug(f"Response status code: {response.status}")
+                    _LOGGER.debug(response.headers)
+                    _LOGGER.debug(await response.text())
+                    raise LifeConnectAuthError(f"Unexpected response from login: status={response.status}")
                 body = await self._json(response)
                 uid = body["UID"]
                 login_token = body["sessionInfo"]["cookieValue"]
@@ -102,6 +111,11 @@ class ConnectLifeApi():
                 "APIKey": API_KEY,
                 "login_token":  login_token
             }) as response:
+                if response.status != 200:
+                    _LOGGER.debug(f"Response status code: {response.status}")
+                    _LOGGER.debug(response.headers)
+                    _LOGGER.debug(await response.text())
+                    raise LifeConnectAuthError(f"Unexpected response from getJWT: status={response.status}")
                 body = await self._json(response)
                 id_token = body["id_token"]
 
@@ -113,6 +127,11 @@ class ConnectLifeApi():
                 "thirdType":"CDC",
                 "thirdClientId": uid,
             }) as response:
+                if response.status != 200:
+                    _LOGGER.debug(f"Response status code: {response.status}")
+                    _LOGGER.debug(response.headers)
+                    _LOGGER.debug(await response.text())
+                    raise LifeConnectAuthError(f"Unexpected response from authorize: status={response.status}")
                 body = await response.json()
                 code = body["code"]
 
@@ -123,6 +142,11 @@ class ConnectLifeApi():
                 "grant_type": "authorization_code",
                 "code": code,
             }) as response:
+                if response.status != 200:
+                    _LOGGER.debug(f"Response status code: {response.status}")
+                    _LOGGER.debug(response.headers)
+                    _LOGGER.debug(await response.text())
+                    raise LifeConnectAuthError(f"Unexpected response from initial access token: status={response.status}")
                 body = await self._json(response)
                 self._access_token = body["access_token"]
                 # Renew 90 seconds before expiration
@@ -139,6 +163,11 @@ class ConnectLifeApi():
                 "grant_type": "refresh_token",
                 "refresh_token": self._refresh_token,
             }) as response:
+                if response.status != 200:
+                    _LOGGER.debug(f"Response status code: {response.status}")
+                    _LOGGER.debug(response.headers)
+                    _LOGGER.debug(await response.text())
+                    raise LifeConnectAuthError(f"Unexpected response from refreshing access token: status={response.status}")
                 body = await response.json()
                 self._access_token = body["access_token"]
                 # Renew 90 seconds before expiration
