@@ -6,9 +6,10 @@ from typing import Dict
 class DeviceType(StrEnum):
     """Known device types."""
     DISHWASHER = "dishwasher"
-    HOB = "hob"
     HEAT_PUMP = "heat_pump"
+    HOB = "hob"
     HOOD = "hood"
+    HVAC = "hvac"
     OVEN = "oven"
     REFRIGERATOR = "refrigerator"
     TUMBLE_DRYER = "tumble_dryer"
@@ -18,6 +19,8 @@ class DeviceType(StrEnum):
 DEVICE_TYPES = {
     "003": DeviceType.WASHING_MACHINE,
     "004": DeviceType.TUMBLE_DRYER,
+    "006": DeviceType.HVAC,
+    "009": DeviceType.HVAC,
     "010": DeviceType.HOOD,
     "013": DeviceType.OVEN,
     "015": DeviceType.DISHWASHER,

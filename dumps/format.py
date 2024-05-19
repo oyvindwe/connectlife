@@ -1,5 +1,4 @@
 import json
-from os import walk
 
 import numpy as np
 import pandas as pd
@@ -17,6 +16,7 @@ files = [
     "Gorenje_washing_machine.json",
     "Asko_professional_tumble_dryer.json",
     "Heat_pump.json",
+    "airCondDumpHisense.json",
 ]
 
 appliances = pd.DataFrame()
