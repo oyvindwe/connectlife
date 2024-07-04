@@ -84,7 +84,7 @@ class ConnectLifeApi():
                 return await response.json()
 
 
-    async def update_appliance(self, puid: str, properties: dict[str, int]):
+    async def update_appliance(self, puid: str, properties: dict[str, str]):
         data = {
             "puid": puid,
             "properties": properties
