@@ -84,6 +84,23 @@ class ConnectLifeApi():
                 return await response.json()
 
 
+    async def update_appliance(self, puid: str, properties: dict[str, str]):
+        data = {
+            "puid": puid,
+            "properties": properties
+        }
+        _LOGGER.debug("Updating appliance with puid %s", puid)
+        await self._fetch_access_token()
+        async with aiohttp.ClientSession() as session:
+            async with session.post(APPLIANCES_URL, json=data, headers={
+                "User-Agent": "connectlife-api-connector 2.1.4",
+                "X-Token": self._access_token
+            }) as response:
+                result = await response.text()
+                _LOGGER.debug(result)
+        _LOGGER.debug("Updated appliance with puid %s", puid)
+
+
     async def _fetch_access_token(self):
         if self._expires is None:
             await self._initial_access_token()
