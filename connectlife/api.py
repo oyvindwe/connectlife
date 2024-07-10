@@ -89,7 +89,7 @@ class ConnectLifeApi():
             "puid": puid,
             "properties": properties
         }
-        _LOGGER.debug("Updating appliance with puid %s", puid)
+        _LOGGER.debug("Updating appliance with puid %s to %s", puid, json.dumps(properties))
         await self._fetch_access_token()
         async with aiohttp.ClientSession() as session:
             async with session.post(APPLIANCES_URL, json=data, headers={
