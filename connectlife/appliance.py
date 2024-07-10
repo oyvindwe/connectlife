@@ -1,4 +1,5 @@
 import datetime as dt
+import re
 from enum import StrEnum
 from typing import Dict
 
@@ -34,6 +35,10 @@ DEVICE_TYPES = {
     "026": DeviceType.REFRIGERATOR,
     "027": DeviceType.WASHING_MACHINE,
 }
+
+
+RE_DATETIME = re.compile(r"^(\d{4,5})/(\d{2})/(\d{2})T(\d{2}):(\d{2}):(\d{2})$")
+MAX_DATETIME = dt.datetime(dt.MAXYEAR, 12, 31, 23, 59, 59, tzinfo=dt.UTC)
 
 
 class ConnectLifeAppliance:
@@ -135,8 +140,21 @@ class ConnectLifeAppliance:
         return self._device_type
 
 
-def convert(value: str) -> int | str:
+def convert(value: str) -> int | str | dt.datetime:
     try:
         return int(value)
     except ValueError:
-        return value
+        pass
+    try:
+        # Unknown if timezone depends on property or appliance. Some properties include UTC in the name.
+        # Extreme values observed:
+        # "0002/11/30T00:00:00" (probably represents no value)
+        # "16679/02/18T23:47:45" (probably represents no value)
+        if match := RE_DATETIME.match(value):
+            (year, month, day, hour, minute, seconds) = map(int, match.groups())
+            if year > dt.MAXYEAR:
+                return MAX_DATETIME
+            return dt.datetime(year, month, day, hour, minute, seconds, tzinfo=dt.UTC)
+    except ValueError:
+        pass
+    return value
