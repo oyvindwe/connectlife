@@ -31,7 +31,7 @@ class LifeConnectAuthError(Exception):
     pass
 
 
-class ConnectLifeApi():
+class ConnectLifeApi:
     def __init__(self, username: str, password: str):
         """Initialize the auth."""
         self._username = username
@@ -40,7 +40,6 @@ class ConnectLifeApi():
         self._expires: dt.datetime | None = None
         self._refresh_token: str | None = None
         self.appliances: Sequence[ConnectLifeAppliance] = []
-
 
     async def authenticate(self) -> bool:
         """Test if we can authenticate with the host."""
@@ -52,21 +51,17 @@ class ConnectLifeApi():
             }) as response:
                 if response.status == 200:
                     body = await self._json(response)
-                    if "UID" in body:
-                        self.uid = body["UID"]
                     return "UID" in body and "sessionInfo" in body and "cookieValue" in body["sessionInfo"]
         return False
 
     async def login(self) -> None:
         await self._fetch_access_token()
 
-
     async def get_appliances(self) -> Any:
         """Make a request."""
         appliances = await self.get_appliances_json()
         self.appliances = [ConnectLifeAppliance(self, a) for a in appliances if "deviceId" in a]
         return self.appliances
-
 
     async def get_appliances_json(self) -> Any:
         """Make a request and return the response as text."""
@@ -82,7 +77,6 @@ class ConnectLifeApi():
                     _LOGGER.debug(await response.text())
                     raise LifeConnectError(f"Unexpected response: status={response.status}")
                 return await response.json()
-
 
     async def update_appliance(self, puid: str, properties: dict[str, str]):
         data = {
@@ -100,13 +94,11 @@ class ConnectLifeApi():
                 _LOGGER.debug(result)
         _LOGGER.debug("Updated appliance with puid %s", puid)
 
-
     async def _fetch_access_token(self):
         if self._expires is None:
             await self._initial_access_token()
         elif self._expires < dt.datetime.now():
             await self._refresh_access_token()
-
 
     async def _initial_access_token(self):
         async with aiohttp.ClientSession() as session:
@@ -141,7 +133,7 @@ class ConnectLifeApi():
                 "redirect_uri": OAUTH2_REDIRECT,
                 "idToken":  id_token,
                 "response_type": "code",
-                "thirdType":"CDC",
+                "thirdType": "CDC",
                 "thirdClientId": uid,
             }) as response:
                 if response.status != 200:
@@ -170,7 +162,6 @@ class ConnectLifeApi():
                 self._expires = dt.datetime.now() + dt.timedelta(0, body["expires_in"] - 90)
                 self._refresh_token = body["refresh_token"]
 
-
     async def _refresh_access_token(self) -> None:
         async with aiohttp.ClientSession() as session:
             async with session.post(OAUTH2_TOKEN, data={
@@ -189,7 +180,6 @@ class ConnectLifeApi():
                 self._access_token = body["access_token"]
                 # Renew 90 seconds before expiration
                 self._expires = dt.datetime.now() + dt.timedelta(0, body["expires_in"] - 90)
-
 
     async def _json(self, response: aiohttp.ClientResponse) -> Any:
         # response may have wrong content-type, cannot use response.json()

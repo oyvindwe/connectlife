@@ -37,5 +37,3 @@ with open("README.md", "w") as f:
     f.write("## Generated from\n\n")
     for filename in files:
         f.write(f"- [{filename[:-5]}]({filename})\n")
-
-

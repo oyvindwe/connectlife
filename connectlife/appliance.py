@@ -17,6 +17,7 @@ class DeviceType(StrEnum):
     WASHING_MACHINE = "washing_machine"
     UNKNOWN = "unknown"
 
+
 DEVICE_TYPES = {
     "003": DeviceType.WASHING_MACHINE,
     "004": DeviceType.TUMBLE_DRYER,
@@ -33,6 +34,7 @@ DEVICE_TYPES = {
     "026": DeviceType.REFRIGERATOR,
     "027": DeviceType.WASHING_MACHINE,
 }
+
 
 class ConnectLifeAppliance:
     """Class representing a single appliance."""
@@ -55,7 +57,7 @@ class ConnectLifeAppliance:
         self._bind_time = dt.datetime.fromtimestamp(data["bindTime"]/1000) if data["bindTime"] else None
         self._use_time = dt.datetime.fromtimestamp(data["useTime"]/1000) if data["useTime"] else None
         self._create_time = dt.datetime.fromtimestamp(data["createTime"]/1000) if data["createTime"] else None
-        self._status_list = {k:int(v) if type(v) == str and v.isdigit() else v for k,v in data["statusList"].items()}
+        self._status_list = {k: convert(v) for k, v in data["statusList"].items()}
         self._device_type = DEVICE_TYPES[self._device_type_code] \
             if self._device_type_code in DEVICE_TYPES \
             else DeviceType.UNKNOWN
@@ -131,3 +133,10 @@ class ConnectLifeAppliance:
     @property
     def device_type(self) -> DeviceType:
         return self._device_type
+
+
+def convert(value: str) -> int | str:
+    try:
+        return int(value)
+    except ValueError:
+        return value

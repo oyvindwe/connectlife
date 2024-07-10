@@ -2,5 +2,6 @@
 .idea/
 *.iml
 
-# Python build
+# Python
+venv/
 dist/
