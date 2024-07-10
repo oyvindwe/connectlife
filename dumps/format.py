@@ -17,6 +17,7 @@ files = [
     "Asko_professional_tumble_dryer.json",
     "Heat_pump.json",
     "airCondDumpHisense.json",
+    "HWFS1015AB.json",
 ]
 
 appliances = pd.DataFrame()
