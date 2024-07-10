@@ -10,6 +10,7 @@ def order_dict(dictionary):
     return {k: order_dict(v) if isinstance(v, dict) else v
             for k, v in sorted(dictionary.items())}
 
+
 async def main():
     parser = argparse.ArgumentParser(
         prog="dump",
@@ -29,4 +30,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
