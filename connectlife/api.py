@@ -7,19 +7,6 @@ import logging
 
 from .appliance import ConnectLifeAppliance
 
-API_KEY = "4_yhTWQmHFpZkQZDSV1uV-_A"
-CLIENT_ID = "5065059336212"
-CLIENT_SECRET = "07swfKgvJhC3ydOUS9YV_SwVz0i4LKqlOLGNUukYHVMsJRF1b-iWeUGcNlXyYCeK"
-
-LOGIN_URL = "https://accounts.eu1.gigya.com/accounts.login"
-JWT_URL = "https://accounts.eu1.gigya.com/accounts.getJWT"
-
-OAUTH2_REDIRECT = "https://api.connectlife.io/swagger/oauth2-redirect.html"
-OAUTH2_AUTHORIZE = "https://oauth.hijuconn.com/oauth/authorize"
-OAUTH2_TOKEN = "https://oauth.hijuconn.com/oauth/token"
-
-APPLIANCES_URL = "https://connectlife.bapi.ovh/appliances"
-
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -32,8 +19,29 @@ class LifeConnectAuthError(Exception):
 
 
 class ConnectLifeApi:
-    def __init__(self, username: str, password: str):
+    api_key = "4_yhTWQmHFpZkQZDSV1uV-_A"
+    client_id = "5065059336212"
+    client_secret = "07swfKgvJhC3ydOUS9YV_SwVz0i4LKqlOLGNUukYHVMsJRF1b-iWeUGcNlXyYCeK"
+
+    login_url = "https://accounts.eu1.gigya.com/accounts.login"
+    jwt_url = "https://accounts.eu1.gigya.com/accounts.getJWT"
+
+    oauth2_redirect = "https://api.connectlife.io/swagger/oauth2-redirect.html"
+    oauth2_authorize = "https://oauth.hijuconn.com/oauth/authorize"
+    oauth2_token = "https://oauth.hijuconn.com/oauth/token"
+
+    appliances_url = "https://connectlife.bapi.ovh/appliances"
+
+    def __init__(self, username: str, password: str, test_server: str = None):
         """Initialize the auth."""
+        if test_server:
+            self.login_url = f"{test_server}/accounts.login"
+            self.jwt_url = f"{test_server}/accounts.getJWT"
+            self.oauth2_redirect = f"{test_server}/swagger/oauth2-redirect.html"
+            self.oauth2_authorize = f"{test_server}/oauth/authorize"
+            self.oauth2_token = f"{test_server}/oauth/token"
+            self.appliances_url = f"{test_server}/appliances"
+
         self._username = username
         self._password = password
         self._access_token: str | None = None
@@ -44,10 +52,10 @@ class ConnectLifeApi:
     async def authenticate(self) -> bool:
         """Test if we can authenticate with the host."""
         async with aiohttp.ClientSession() as session:
-            async with session.post(LOGIN_URL, data={
+            async with session.post(self.login_url, data={
                 "loginID": self._username,
                 "password": self._password,
-                "APIKey": API_KEY,
+                "APIKey": self.api_key,
             }) as response:
                 if response.status == 200:
                     body = await self._json(response)
@@ -67,7 +75,7 @@ class ConnectLifeApi:
         """Make a request and return the response as text."""
         await self._fetch_access_token()
         async with aiohttp.ClientSession() as session:
-            async with session.get(APPLIANCES_URL, headers={
+            async with session.get(self.appliances_url, headers={
                 "User-Agent": "connectlife-api-connector 2.1.4",
                 "X-Token": self._access_token
             }) as response:
@@ -86,7 +94,7 @@ class ConnectLifeApi:
         _LOGGER.debug("Updating appliance with puid %s to %s", puid, json.dumps(properties))
         await self._fetch_access_token()
         async with aiohttp.ClientSession() as session:
-            async with session.post(APPLIANCES_URL, json=data, headers={
+            async with session.post(self.appliances_url, json=data, headers={
                 "User-Agent": "connectlife-api-connector 2.1.4",
                 "X-Token": self._access_token
             }) as response:
@@ -102,10 +110,10 @@ class ConnectLifeApi:
 
     async def _initial_access_token(self):
         async with aiohttp.ClientSession() as session:
-            async with session.post(LOGIN_URL, data={
+            async with session.post(self.login_url, data={
                 "loginID": self._username,
                 "password": self._password,
-                "APIKey": API_KEY,
+                "APIKey": self.api_key
             }) as response:
                 if response.status != 200:
                     _LOGGER.debug(f"Response status code: {response.status}")
@@ -116,8 +124,8 @@ class ConnectLifeApi:
                 uid = body["UID"]
                 login_token = body["sessionInfo"]["cookieValue"]
 
-            async with session.post(JWT_URL, data={
-                "APIKey": API_KEY,
+            async with session.post(self.jwt_url, data={
+                "APIKey": self.api_key,
                 "login_token":  login_token
             }) as response:
                 if response.status != 200:
@@ -128,9 +136,9 @@ class ConnectLifeApi:
                 body = await self._json(response)
                 id_token = body["id_token"]
 
-            async with session.post(OAUTH2_AUTHORIZE, json={
-                "client_id": CLIENT_ID,
-                "redirect_uri": OAUTH2_REDIRECT,
+            async with session.post(self.oauth2_authorize, json={
+                "client_id": self.client_id,
+                "redirect_uri": self.oauth2_redirect,
                 "idToken":  id_token,
                 "response_type": "code",
                 "thirdType": "CDC",
@@ -144,10 +152,10 @@ class ConnectLifeApi:
                 body = await response.json()
                 code = body["code"]
 
-            async with session.post(OAUTH2_TOKEN, data={
-                "client_id": CLIENT_ID,
-                "client_secret": CLIENT_SECRET,
-                "redirect_uri": OAUTH2_REDIRECT,
+            async with session.post(self.oauth2_token, data={
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+                "redirect_uri": self.oauth2_redirect,
                 "grant_type": "authorization_code",
                 "code": code,
             }) as response:
@@ -164,10 +172,10 @@ class ConnectLifeApi:
 
     async def _refresh_access_token(self) -> None:
         async with aiohttp.ClientSession() as session:
-            async with session.post(OAUTH2_TOKEN, data={
-                "client_id": CLIENT_ID,
-                "client_secret": CLIENT_SECRET,
-                "redirect_uri": OAUTH2_REDIRECT,
+            async with session.post(self.oauth2_token, data={
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+                "redirect_uri": self.oauth2_redirect,
                 "grant_type": "refresh_token",
                 "refresh_token": self._refresh_token,
             }) as response:
@@ -181,7 +189,8 @@ class ConnectLifeApi:
                 # Renew 90 seconds before expiration
                 self._expires = dt.datetime.now() + dt.timedelta(0, body["expires_in"] - 90)
 
-    async def _json(self, response: aiohttp.ClientResponse) -> Any:
+    @staticmethod
+    async def _json(response: aiohttp.ClientResponse) -> Any:
         # response may have wrong content-type, cannot use response.json()
         text = await response.text()
         _LOGGER.debug(f"response: {text}")
