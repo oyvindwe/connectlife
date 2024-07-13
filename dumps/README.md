@@ -1,16 +1,16 @@
 # Appliance dumps
 
-- [015](015.md)
-- [012](012.md)
-- [021](021.md)
-- [010](010.md)
-- [020](020.md)
-- [023](023.md)
-- [013](013.md)
-- [003](003.md)
-- [027](027.md)
-- [004](004.md)
-- [016](016.md)
-- [009](009.md)
-- [025](025.md)
-- [026](026.md)
+- [003](003.md): ASKO professional washing machine
+- [004](004.md): ASKO professional tumble dryer
+- [009](009.md): Aircondition
+- [010](010.md): ASKO induction hob
+- [012](012.md): ASKO hood
+- [013](013.md): Oven
+- [015](015.md): ASKO dishwasher
+- [016](016.md): Heat pump
+- [020](020.md): ASKO induction hob
+- [021](021.md): ASKO hood
+- [023](023.md): Atag oven
+- [025](025.md): Washing machine
+- [026](026.md): Hisense refrigerator
+- [027](027.md): Gorenje washing machine

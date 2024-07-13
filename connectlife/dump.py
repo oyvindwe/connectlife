@@ -1,7 +1,8 @@
 import argparse
-
 import asyncio
+import logging
 import json
+import sys
 
 from .api import ConnectLifeApi
 
@@ -26,7 +27,17 @@ async def main():
         appliance["deviceId"] = "<redacted>"
         appliance["puid"] = "<redacted>"
         appliance["wifiId"] = "<redacted>"
-    print(json.dumps([order_dict(a) for a in appliances], indent=2))
+    for a in appliances:
+        with open(f'{a["deviceTypeCode"]}-{a["deviceFeatureCode"]}.json', 'w') as f:
+            json.dump(a, f, indent=2)
 
 if __name__ == "__main__":
+    logger = logging.getLogger("connectlife")
+    logger.setLevel(logging.DEBUG)
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
     asyncio.run(main())
