@@ -16,7 +16,7 @@ Licensed under [GPLv3](LICENSE).
 To test out the library:
 ```bash
 pip install connectlife
-python -m connectlife.dump <username> <password>
+python -m connectlife.dump --username <username> --pasword <password>
 ```
 
 This will log in to the ConnectLife API using the provided username and password, and print the list of all fields
