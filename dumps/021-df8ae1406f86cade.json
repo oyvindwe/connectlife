@@ -42,7 +42,7 @@
     "daily_energy_kwh": 0
   },
   "useTime": 0,
-  "offlineState": 0,
+  "offlineState": 1,
   "seq": 0,
   "createTime": 0
 }

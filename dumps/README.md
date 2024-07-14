@@ -2,6 +2,7 @@
 
 - [003](003.md): ASKO professional washing machine
 - [004](004.md): ASKO professional tumble dryer
+- [007](007.md): Dehumidifier
 - [009](009.md): Aircondition
 - [010](010.md): ASKO induction hob
 - [012](012.md): ASKO hood
@@ -14,3 +15,4 @@
 - [025](025.md): Washing machine
 - [026](026.md): Hisense refrigerator
 - [027](027.md): Gorenje washing machine
+- [032](032.md): Gorenje Dryer DPNA83W
