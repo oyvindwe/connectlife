@@ -66,6 +66,7 @@ for filename in filenames:
         appliance = json.load(f)
         appliance["deviceId"] = filename[0:-5]
         appliance["puid"] = f"puid{appliance['deviceId']}"
+        appliance["deviceNickName"] = f'{appliance["deviceNickName"]} ({appliance["deviceTypeCode"]}-{appliance["deviceFeatureCode"]})'
         appliances[appliance["puid"]] = appliance
 
 app = web.Application()

@@ -7,7 +7,7 @@
   "deviceNickName": "ASKO dishwasher",
   "deviceTypeCode": "015",
   "deviceTypeName": "",
-  "offlineState": 0,
+  "offlineState": 1,
   "puid": "<redacted>",
   "role": 1,
   "roomId": 1044366,

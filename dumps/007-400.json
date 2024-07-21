@@ -1,0 +1,33 @@
+{
+  "bindTime": 1719439058604,
+  "createTime": 0,
+  "deviceFeatureCode": "400",
+  "deviceFeatureName": "400\u6709\u81ea\u52a8\u98ce\u65e0\u4e2d\u98ce\u65e0\u529f\u7387",
+  "deviceId": "<redacted>",
+  "deviceNickName": "Dehumidifier",
+  "deviceTypeCode": "007",
+  "deviceTypeName": "",
+  "offlineState": 1,
+  "puid": "<redacted>",
+  "role": 1,
+  "roomId": 4841165,
+  "roomName": "Living Room",
+  "seq": 0,
+  "statusList": {
+    "daily_energy_kwh": 0,
+    "f_e_filterclean": "0",
+    "f_e_pump": "0",
+    "f_e_push": "0",
+    "f_e_temp": "0",
+    "f_e_tubetemp": "0",
+    "f_e_waterfull": "0",
+    "f_e_wetsensor": "0",
+    "f_humidity": "32",
+    "t_fan_speed": "2",
+    "t_humidity": "40",
+    "t_power": "1",
+    "t_work_mode": "1"
+  },
+  "useTime": 1719439058583,
+  "wifiId": "<redacted>"
+}
