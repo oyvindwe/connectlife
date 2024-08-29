@@ -2,8 +2,9 @@
 
 - [003](003.md): ASKO professional washing machine
 - [004](004.md): ASKO professional tumble dryer
+- [006](006.md): Air conditioner
 - [007](007.md): Dehumidifier
-- [009](009.md): Aircondition
+- [009](009.md): Air conditioner
 - [010](010.md): ASKO induction hob
 - [012](012.md): ASKO hood
 - [013](013.md): Oven
