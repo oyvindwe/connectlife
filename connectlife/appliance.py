@@ -116,7 +116,7 @@ class ConnectLifeAppliance:
         return self._room_name
 
     @property
-    def status_list(self) -> Dict[str, str | int | dt.datetime]:
+    def status_list(self) -> Dict[str, str | int | float | dt.datetime]:
         return self._status_list
 
     @property
@@ -140,7 +140,9 @@ class ConnectLifeAppliance:
         return self._device_type
 
 
-def convert(value: str) -> int | str | dt.datetime:
+def convert(value: str | float) -> float | int | str | dt.datetime:
+    if isinstance(value, float):
+        return value
     try:
         return int(value)
     except ValueError:
