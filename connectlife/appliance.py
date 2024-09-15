@@ -37,7 +37,7 @@ DEVICE_TYPES = {
 }
 
 
-RE_DATETIME = re.compile(r"^(\d{4,5})/(\d{2})/(\d{2})T(\d{2}):(\d{2}):(\d{2})$")
+RE_DATETIME = re.compile(r"^(\d{4,5})/(\d{1,2})/(\d{1,2})T(\d{1,2}):(\d{1,2}):(\d{1,2})$")
 MAX_DATETIME = dt.datetime(dt.MAXYEAR, 12, 31, 23, 59, 59, tzinfo=dt.UTC)
 
 
