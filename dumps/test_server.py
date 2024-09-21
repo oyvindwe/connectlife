@@ -54,19 +54,28 @@ async def update_appliance(request):
                 appliance["statusList"][key] = req["properties"][key]
             return web.Response(
                 content_type="application/json",
-                text='{"resultCode":0,"kvMap":null,"errorCode":0,"errorDesc":null}'
+                text=json.dumps({"resultCode": 0, "kvMap": None, "errorCode":0, "errorDesc": None})
             )
         unknowns = [key for key in req["properties"] if key not in appliance["statusList"]]
         return web.Response(
             content_type="application/json",
-            text=f'{"resultCode":-1,"kvMap":null,"errorCode":400,"errorDesc":"Unknown properies {unknowns}"}'
+            text=json.dumps({
+                "resultCode": -1,
+                "kvMap": None,
+                "errorCode": 400,
+                "errorDesc": f"Unknown properties {unknowns}"
+            })
         )
     else:
         return web.Response(
             content_type="application/json",
-            text=f'{"resultCode":-1,"kvMap":null,"errorCode":404,"errorDesc":"Unknown puid {req["puid"]}"}'
+            text=json.dumps({
+                "resultCode": -1,
+                "kvMap": None,
+                "errorCode": 404,
+                "errorDesc": f'Unknown puid {req["puid"]}'
+            })
         )
-
 def main(args):
     filenames = list(filter(lambda f: f[-5:] == ".json", [f for f in listdir(".") if isfile(join(".", f))]))
     for filename in filenames:
