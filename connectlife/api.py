@@ -121,7 +121,16 @@ class ConnectLifeApi:
                     _LOGGER.debug(await response.text())
                     raise LifeConnectAuthError(f"Unexpected response from login: status={response.status}")
                 body = await self._json(response)
-                uid = body["UID"]
+                error_code = body["errorCode"] if "errorCode" in body else None
+                error_message = body["errorMessage"] if "errorMessage" in body else None
+                error_details = body["errorDetails"] if "errorDetails" in body else None
+                if error_code or error_message or error_details:
+                    raise LifeConnectAuthError(f"Failed to login. Code: {error_code} Message: '{error_message}' Details: '{error_details}'")
+                uid = self._require_auth_field(body, "UID")
+                session_info = self._require_auth_field(body, "sessionInfo")
+                if "cookieValue" not in session_info:
+                    _LOGGER.info(f"Missing 'sessionInfo.cookieValue' in response: {response}")
+                    raise LifeConnectAuthError(f"Missing 'sessionInfo.cookieValue' in response")
                 login_token = body["sessionInfo"]["cookieValue"]
 
             async with session.post(self.jwt_url, data={
@@ -134,6 +143,8 @@ class ConnectLifeApi:
                     _LOGGER.debug(await response.text())
                     raise LifeConnectAuthError(f"Unexpected response from getJWT: status={response.status}")
                 body = await self._json(response)
+                if "id_token" not in body:
+                    raise LifeConnectAuthError(f"Missing 'id_token' in response")
                 id_token = body["id_token"]
 
             async with session.post(self.oauth2_authorize, json={
@@ -150,7 +161,7 @@ class ConnectLifeApi:
                     _LOGGER.debug(await response.text())
                     raise LifeConnectAuthError(f"Unexpected response from authorize: status={response.status}")
                 body = await response.json()
-                code = body["code"]
+                code = self._require_auth_field(body, "code")
 
             async with session.post(self.oauth2_token, data={
                 "client_id": self.client_id,
@@ -165,10 +176,11 @@ class ConnectLifeApi:
                     _LOGGER.debug(await response.text())
                     raise LifeConnectAuthError(f"Unexpected response from initial access token: status={response.status}")
                 body = await self._json(response)
-                self._access_token = body["access_token"]
+                self._access_token = self._require_auth_field(body, "access_token")
+                expires_in = self._require_auth_field(body, "expires_in")
                 # Renew 90 seconds before expiration
-                self._expires = dt.datetime.now() + dt.timedelta(0, body["expires_in"] - 90)
-                self._refresh_token = body["refresh_token"]
+                self._expires = dt.datetime.now() + dt.timedelta(0, expires_in - 90)
+                self._refresh_token = self._require_auth_field(body, "refresh_token")
 
     async def _refresh_access_token(self) -> None:
         async with aiohttp.ClientSession() as session:
@@ -185,9 +197,10 @@ class ConnectLifeApi:
                     _LOGGER.debug(await response.text())
                     raise LifeConnectAuthError(f"Unexpected response from refreshing access token: status={response.status}")
                 body = await response.json()
-                self._access_token = body["access_token"]
+                self._access_token = self._require_auth_field(body, "access_token")
+                expires_in = self._require_auth_field(body, "expires_in")
                 # Renew 90 seconds before expiration
-                self._expires = dt.datetime.now() + dt.timedelta(0, body["expires_in"] - 90)
+                self._expires = dt.datetime.now() + dt.timedelta(0, expires_in - 90)
 
     @staticmethod
     async def _json(response: aiohttp.ClientResponse) -> Any:
@@ -195,3 +208,10 @@ class ConnectLifeApi:
         text = await response.text()
         _LOGGER.debug(f"response: {text}")
         return json.loads(text)
+
+    @staticmethod
+    def _require_auth_field(response: dict[str, Any], field: str):
+        if field not in response:
+            _LOGGER.info(f"Missing '{field}' in response: {response}")
+            raise LifeConnectAuthError(f"Missing '{field}' in response")
+        return response[field]
