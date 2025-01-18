@@ -34,6 +34,8 @@ async def main(username: str, password: str, format: str):
 
 
 if __name__ == "__main__":
+    if sys.platform == 'win32':
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     parser = argparse.ArgumentParser(
         prog="dump",
         description="Connects to the ConnectLife API and writes a file for each appliance")
