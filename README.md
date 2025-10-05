@@ -24,3 +24,15 @@ for all appliances that is registered with the account.
 
 The Home Assistant integration is currently in discovery phase. Please contribute your device dumps to help
 the development.
+
+## Test server
+
+To use the test server to support developing the Home Assistant integration, clone this repo and run:
+
+```bash
+python -m connectlife.test_server -d dumps
+```
+
+This will expose all the devices in the `dumps` directory as a limited ConnectLife API server.
+In the ConnectLife integration in Home Assistant, switch on development mode in the options dialog. 
+
