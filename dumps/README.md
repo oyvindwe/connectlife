@@ -13,7 +13,8 @@
 - [020](020.md): ASKO induction hob
 - [021](021.md): ASKO hood
 - [023](023.md): Atag oven
-- [025](025.md): Washing machine
+- [025](025.md): Washing Machine
 - [026](026.md): Hisense refrigerator
-- [027](027.md): Gorenje washing machine
-- [032](032.md): Gorenje Dryer DPNA83W
+- [027](027.md): Washing Machine
+- [030](030.md): Dryer
+- [032](032.md): Tumble Dryer
