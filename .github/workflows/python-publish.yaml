@@ -10,7 +10,11 @@ jobs:
   build:
     name: Build distribution 📦
     runs-on: ubuntu-latest
-
+    environment:
+      name: pypi
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
