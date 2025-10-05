@@ -17,4 +17,4 @@ jobs:
         with:
           version: "0.8.23"
       - name: Run tests
-        run: python3 -m unittest
+        run: uv run python3 -m unittest
