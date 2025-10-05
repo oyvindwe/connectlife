@@ -2,15 +2,12 @@
 
 ## Prerequisites:
 
-- [pyenv](https://github.com/pyenv/pyenv)
+- [uv](https://docs.astral.sh/uv/getting-started/installation/)
 
 ## Install environment
 
 ```bash
-pyenv install
-python -m venv venv
-source venv/bin/activate
-pip install .
+uv sync
 ```
 
 ## Test server
@@ -22,8 +19,7 @@ but is not persisted. The only validation is that the `puid` and `property` exis
 are writable and that any value is legal.
 
 ```bash
-cd dumps
-python -m test_server
+uv run python -m connectlife.test_server
 ```
 
 To use the test server, provide the URL to the test server:  

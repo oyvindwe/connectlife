@@ -27,12 +27,5 @@ the development.
 
 ## Test server
 
-To use the test server to support developing the Home Assistant integration, clone this repo and run:
-
-```bash
-python -m connectlife.test_server -d dumps
-```
-
-This will expose all the devices in the `dumps` directory as a limited ConnectLife API server.
-In the ConnectLife integration in Home Assistant, switch on development mode in the options dialog. 
-
+To use the test server to support developing the Home Assistant integration, clone this repo and see
+[DEVELOPMENT.md](DEVELOPMENT.md#test-server):
