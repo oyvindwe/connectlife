@@ -186,6 +186,22 @@ class TestAppliancesReauth(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(api._access_token, "new-access-token")
         self.assertFalse(requests)
 
+    async def test_appliances_request_does_not_retry_on_403(self) -> None:
+        api = ConnectLifeApi("user@example.com", "secret")
+        api._access_token = "cached-access-token"
+        api._expires = dt.datetime.now() + dt.timedelta(minutes=5)
+
+        requests: list[tuple[str, str, FakeResponse]] = [
+            ("GET", api.appliances_url, FakeResponse(403, {"error": "forbidden"})),
+        ]
+
+        with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
+            with self.assertRaises(LifeConnectError) as ctx:
+                await api.get_appliances_json()
+
+        self.assertEqual(ctx.exception.status, 403)
+        self.assertFalse(requests)
+
 
 class TestGatewayWrites(unittest.IsolatedAsyncioTestCase):
     """Appliance updates should try the gateway first, then fall back to bapi."""
