@@ -493,6 +493,7 @@ class ConnectLifeApi:
             "appId": GATEWAY_APP_ID,
             "appSecret": GATEWAY_APP_SECRET,
             "languageId": GATEWAY_LANGUAGE_ID,
+            # MD5 of timestamp matches the vendor's mobile app protocol.
             "randStr": hashlib.md5(timestamp.encode()).hexdigest(),
             "timeStamp": timestamp,
             "timezone": GATEWAY_TIMEZONE,

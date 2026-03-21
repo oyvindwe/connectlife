@@ -8,6 +8,8 @@ from typing import Any
 import unittest
 from unittest.mock import patch
 
+import aiohttp
+
 from connectlife import api as api_module
 from connectlife.api import (
     ConnectLifeApi,
@@ -253,6 +255,109 @@ class TestGatewayWrites(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(api._access_token, "new-access-token")
         self.assertFalse(requests)
+
+
+class TestRefreshTokenExpiry(unittest.IsolatedAsyncioTestCase):
+    """Expired refresh token should trigger a full login instead of refresh."""
+
+    async def test_expired_refresh_token_triggers_full_login(self) -> None:
+        api = ConnectLifeApi("user@example.com", "secret")
+        api._access_token = "expired-access-token"
+        api._refresh_token = "expired-refresh-token"
+        api._expires = dt.datetime.now() - dt.timedelta(seconds=1)
+        api._refresh_token_expires = dt.datetime.now() - dt.timedelta(seconds=1)
+
+        requests: list[tuple[str, str, FakeResponse]] = [
+            *_successful_login_requests(api),
+        ]
+
+        with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
+            await api._fetch_access_token()
+
+        self.assertEqual(api._access_token, "new-access-token")
+        self.assertEqual(api._refresh_token, "new-refresh-token")
+        self.assertFalse(requests)
+
+
+class TestTransportErrorRetry(unittest.IsolatedAsyncioTestCase):
+    """Transport errors during login should be retried once."""
+
+    async def test_login_retries_after_transport_error(self) -> None:
+        api = ConnectLifeApi("user@example.com", "secret")
+
+        factory = FakeClientSessionFactory([])
+
+        call_count = 0
+        original_initial = api._initial_access_token
+
+        async def flaky_initial() -> None:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise aiohttp.ClientConnectionError("connection reset")
+            # On second attempt, do a real (mocked) login
+            await original_initial()
+
+        requests: list[tuple[str, str, FakeResponse]] = [
+            *_successful_login_requests(api),
+        ]
+
+        with (
+            patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)),
+            patch.object(api, "_initial_access_token", side_effect=flaky_initial),
+            patch.object(api_module.asyncio, "sleep", return_value=None),
+        ):
+            await api.login()
+
+        self.assertEqual(call_count, 2)
+        self.assertEqual(api._access_token, "new-access-token")
+
+    async def test_login_raises_after_exhausting_transport_retries(self) -> None:
+        api = ConnectLifeApi("user@example.com", "secret")
+
+        async def always_fail() -> None:
+            raise aiohttp.ClientConnectionError("connection refused")
+
+        with (
+            patch.object(api, "_initial_access_token", side_effect=always_fail),
+            patch.object(api_module.asyncio, "sleep", return_value=None),
+        ):
+            with self.assertRaises(LifeConnectAuthError) as ctx:
+                await api.login()
+            self.assertIn("connection refused", str(ctx.exception))
+
+
+class TestAuthenticate(unittest.IsolatedAsyncioTestCase):
+    """authenticate() should return True on success and False on auth failure."""
+
+    async def test_authenticate_returns_true_on_success(self) -> None:
+        api = ConnectLifeApi("user@example.com", "secret")
+
+        requests: list[tuple[str, str, FakeResponse]] = [
+            *_successful_login_requests(api),
+        ]
+
+        with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
+            result = await api.authenticate()
+
+        self.assertTrue(result)
+        self.assertEqual(api._access_token, "new-access-token")
+
+    async def test_authenticate_returns_false_on_auth_error(self) -> None:
+        api = ConnectLifeApi("user@example.com", "secret")
+
+        requests: list[tuple[str, str, FakeResponse]] = [
+            ("POST", api.login_url, FakeResponse(200, {
+                "errorCode": 403042,
+                "errorMessage": "Invalid LoginID",
+                "errorDetails": "invalid loginID or password",
+            })),
+        ]
+
+        with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
+            result = await api.authenticate()
+
+        self.assertFalse(result)
 
 
 class TestExceptionHierarchy(unittest.TestCase):
