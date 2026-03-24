@@ -12,10 +12,14 @@ import aiohttp
 
 from connectlife import api as api_module
 from connectlife.api import (
+    BAPI_APPLIANCES_TIMEOUT,
     ConnectLifeApi,
+    GATEWAY_DEVICE_LIST_URL,
     GATEWAY_UPDATE_URL,
+    LEGACY_OAUTH_PROFILE,
     LifeConnectAuthError,
     LifeConnectError,
+    OFFICIAL_OAUTH_PROFILE,
 )
 
 
@@ -47,7 +51,7 @@ class FakeResponse:
 class FakeSession:
     """Minimal aiohttp ClientSession stand-in with scripted responses."""
 
-    def __init__(self, requests: list[tuple[str, str, FakeResponse]]) -> None:
+    def __init__(self, requests: list[tuple[str, str, FakeResponse | Exception]]) -> None:
         self._requests = requests
 
     async def __aenter__(self) -> "FakeSession":
@@ -70,20 +74,27 @@ class FakeSession:
             raise AssertionError(
                 f"Expected {expected_method} {expected_url}, got {method} {url}"
             )
+        if isinstance(response, Exception):
+            raise response
         return response
 
 
 class FakeClientSessionFactory:
     """Factory returning fake sessions that share one scripted request queue."""
 
-    def __init__(self, requests: list[tuple[str, str, FakeResponse]]) -> None:
+    def __init__(self, requests: list[tuple[str, str, FakeResponse | Exception]]) -> None:
         self._requests = requests
 
     def __call__(self, *args: Any, **kwargs: Any) -> FakeSession:
         return FakeSession(self._requests)
 
 
-def _successful_login_requests(api: ConnectLifeApi) -> list[tuple[str, str, FakeResponse]]:
+def _successful_login_requests(
+    api: ConnectLifeApi,
+    *,
+    access_token: str = "new-access-token",
+    refresh_token: str = "new-refresh-token",
+) -> list[tuple[str, str, FakeResponse]]:
     """Return the sequence of requests for a successful 4-step OAuth2 login."""
     return [
         (
@@ -97,9 +108,9 @@ def _successful_login_requests(api: ConnectLifeApi) -> list[tuple[str, str, Fake
             "POST",
             api.oauth2_token,
             FakeResponse(200, {
-                "access_token": "new-access-token",
+                "access_token": access_token,
                 "expires_in": 3600,
-                "refresh_token": "new-refresh-token",
+                "refresh_token": refresh_token,
                 "refreshTokenExpiredTime": 4_102_444_800_000,
             }),
         ),
@@ -164,6 +175,71 @@ class TestLoginRetry(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(LifeConnectAuthError):
                 await api.login()
 
+    async def test_initial_login_falls_back_to_official_oauth_profile(self) -> None:
+        api = ConnectLifeApi("user@example.com", "secret")
+
+        requests: list[tuple[str, str, FakeResponse | Exception]] = [
+            (
+                "POST",
+                api.login_url,
+                FakeResponse(200, {"UID": "uid-1", "sessionInfo": {"cookieValue": "login-token"}}),
+            ),
+            ("POST", api.jwt_url, FakeResponse(200, {"id_token": "jwt-token"})),
+            ("POST", api.oauth2_authorize, FakeResponse(500, {"error": "legacy oauth unavailable"})),
+            (
+                "POST",
+                api.login_url,
+                FakeResponse(200, {"UID": "uid-1", "sessionInfo": {"cookieValue": "login-token"}}),
+            ),
+            ("POST", api.jwt_url, FakeResponse(200, {"id_token": "jwt-token"})),
+            ("POST", api.oauth2_authorize, FakeResponse(500, {"error": "legacy oauth unavailable"})),
+            (
+                "POST",
+                api.login_url,
+                FakeResponse(200, {"UID": "uid-1", "sessionInfo": {"cookieValue": "login-token"}}),
+            ),
+            ("POST", api.jwt_url, FakeResponse(200, {"id_token": "jwt-token"})),
+            ("POST", api.oauth2_authorize, FakeResponse(200, {"code": "auth-code"})),
+            (
+                "POST",
+                api.oauth2_token,
+                FakeResponse(200, {
+                    "access_token": "official-access-token",
+                    "expires_in": 3600,
+                    "refresh_token": "official-refresh-token",
+                }),
+            ),
+        ]
+
+        authorize_payloads: list[dict[str, Any]] = []
+        token_payloads: list[dict[str, Any]] = []
+
+        def record_post(self: FakeSession, url: str, **kwargs: Any) -> FakeResponse:
+            if url == api.oauth2_authorize and "json" in kwargs:
+                authorize_payloads.append(kwargs["json"])
+            if url == api.oauth2_token and "data" in kwargs:
+                token_payloads.append(kwargs["data"])
+            return FakeSession._next(self, "POST", url)
+
+        with (
+            patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)),
+            patch.object(FakeSession, "post", new=record_post),
+            patch.object(api_module.asyncio, "sleep", return_value=None),
+        ):
+            await api.login()
+
+        self.assertEqual(api._access_token, "official-access-token")
+        self.assertEqual(api._refresh_token, "official-refresh-token")
+        self.assertEqual(authorize_payloads[0]["client_id"], LEGACY_OAUTH_PROFILE.client_id)
+        self.assertEqual(authorize_payloads[0]["redirect_uri"], LEGACY_OAUTH_PROFILE.redirect_uri)
+        self.assertEqual(authorize_payloads[1]["client_id"], LEGACY_OAUTH_PROFILE.client_id)
+        self.assertEqual(authorize_payloads[1]["redirect_uri"], LEGACY_OAUTH_PROFILE.redirect_uri)
+        self.assertEqual(authorize_payloads[2]["client_id"], OFFICIAL_OAUTH_PROFILE.client_id)
+        self.assertEqual(authorize_payloads[2]["redirect_uri"], OFFICIAL_OAUTH_PROFILE.redirect_uri)
+        self.assertEqual(token_payloads[0]["client_id"], OFFICIAL_OAUTH_PROFILE.client_id)
+        self.assertEqual(token_payloads[0]["client_secret"], OFFICIAL_OAUTH_PROFILE.client_secret)
+        self.assertFalse(requests)
+
 
 class TestAppliancesReauth(unittest.IsolatedAsyncioTestCase):
     """Transient failures on appliance requests should trigger re-auth and retry."""
@@ -186,6 +262,49 @@ class TestAppliancesReauth(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(api._access_token, "new-access-token")
         self.assertFalse(requests)
 
+    async def test_appliances_request_falls_back_to_gateway_after_bapi_failures(self) -> None:
+        api = ConnectLifeApi("user@example.com", "secret")
+        api._access_token = "cached-access-token"
+        api._expires = dt.datetime.now() + dt.timedelta(minutes=5)
+
+        requests: list[tuple[str, str, FakeResponse | Exception]] = [
+            ("GET", api.appliances_url, FakeResponse(500, {"error": "backend unavailable"})),
+            *_successful_login_requests(api, access_token="replacement-access-token", refresh_token="replacement-refresh-token"),
+            ("GET", api.appliances_url, FakeResponse(500, {"error": "backend unavailable"})),
+            (
+                "GET",
+                GATEWAY_DEVICE_LIST_URL,
+                FakeResponse(200, {"response": {"resultCode": 0, "deviceList": [{"deviceId": "device-1"}]}}),
+            ),
+        ]
+
+        with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
+            result = await api.get_appliances_json()
+
+        self.assertEqual(result, [{"deviceId": "device-1"}])
+        self.assertEqual(api._access_token, "replacement-access-token")
+        self.assertFalse(requests)
+
+    async def test_appliances_request_falls_back_to_gateway_after_timeout(self) -> None:
+        api = ConnectLifeApi("user@example.com", "secret")
+        api._access_token = "cached-access-token"
+        api._expires = dt.datetime.now() + dt.timedelta(minutes=5)
+
+        requests: list[tuple[str, str, FakeResponse | Exception]] = [
+            ("GET", api.appliances_url, TimeoutError()),
+            (
+                "GET",
+                GATEWAY_DEVICE_LIST_URL,
+                FakeResponse(200, {"response": {"resultCode": 0, "deviceList": [{"deviceId": "device-1"}]}}),
+            ),
+        ]
+
+        with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
+            result = await api.get_appliances_json()
+
+        self.assertEqual(result, [{"deviceId": "device-1"}])
+        self.assertFalse(requests)
+
     async def test_appliances_request_does_not_retry_on_403(self) -> None:
         api = ConnectLifeApi("user@example.com", "secret")
         api._access_token = "cached-access-token"
@@ -201,6 +320,9 @@ class TestAppliancesReauth(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(ctx.exception.status, 403)
         self.assertFalse(requests)
+
+    def test_bapi_appliance_timeout_is_shorter_than_global_timeout(self) -> None:
+        self.assertLess(BAPI_APPLIANCES_TIMEOUT.total, ConnectLifeApi.request_timeout.total)
 
 
 class TestGatewayWrites(unittest.IsolatedAsyncioTestCase):
