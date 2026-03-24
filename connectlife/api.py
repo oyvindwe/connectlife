@@ -19,7 +19,8 @@ from .appliance import ConnectLifeAppliance
 
 _LOGGER = logging.getLogger(__name__)
 
-TRANSIENT_STATUSES = frozenset({401, 500, 502, 503, 504})
+REAUTH_STATUSES = frozenset({401, 500, 502, 503, 504})
+GATEWAY_FALLBACK_STATUSES = frozenset({500, 502, 503, 504})
 AUTH_TRANSIENT_STATUSES = frozenset({500, 502, 503, 504})
 
 BAPI_USER_AGENT = "connectlife-api-connector 2.1.4"
@@ -216,7 +217,7 @@ class ConnectLifeApi:
             ) as response:
                 if response.status != 200:
                     body = await self._read_response_body(response)
-                    if retry_on_reauth and response.status in TRANSIENT_STATUSES:
+                    if retry_on_reauth and response.status in REAUTH_STATUSES:
                         _LOGGER.warning(
                             "ConnectLife appliances request failed with status=%s, retrying after re-authentication",
                             response.status,
@@ -613,7 +614,7 @@ class ConnectLifeApi:
         )
 
     def _should_fallback_to_gateway(self, err: LifeConnectError) -> bool:
-        return err.endpoint == self.appliances_url and err.status in TRANSIENT_STATUSES
+        return err.endpoint == self.appliances_url and err.status in GATEWAY_FALLBACK_STATUSES
 
     @staticmethod
     def _sign_gateway_request(payload: dict[str, Any]) -> str:

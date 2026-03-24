@@ -175,6 +175,29 @@ class TestLoginRetry(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(LifeConnectAuthError):
                 await api.login()
 
+    async def test_auth_401_does_not_fall_back_to_official_oauth_profile(self) -> None:
+        api = ConnectLifeApi("user@example.com", "secret")
+
+        requests: list[tuple[str, str, FakeResponse | Exception]] = [
+            (
+                "POST",
+                api.login_url,
+                FakeResponse(200, {"UID": "uid-1", "sessionInfo": {"cookieValue": "login-token"}}),
+            ),
+            ("POST", api.jwt_url, FakeResponse(200, {"id_token": "jwt-token"})),
+            ("POST", api.oauth2_authorize, FakeResponse(401, {"error": "unauthorized"})),
+        ]
+
+        with (
+            patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)),
+            patch.object(api_module.asyncio, "sleep", return_value=None),
+        ):
+            with self.assertRaises(LifeConnectAuthError) as ctx:
+                await api.login()
+
+        self.assertEqual(ctx.exception.status, 401)
+        self.assertFalse(requests)
+
     async def test_initial_login_falls_back_to_official_oauth_profile(self) -> None:
         api = ConnectLifeApi("user@example.com", "secret")
 
@@ -319,6 +342,25 @@ class TestAppliancesReauth(unittest.IsolatedAsyncioTestCase):
                 await api.get_appliances_json()
 
         self.assertEqual(ctx.exception.status, 403)
+        self.assertFalse(requests)
+
+    async def test_appliances_request_401_reauths_once_without_gateway_fallback(self) -> None:
+        api = ConnectLifeApi("user@example.com", "secret")
+        api._access_token = "cached-access-token"
+        api._expires = dt.datetime.now() + dt.timedelta(minutes=5)
+
+        requests: list[tuple[str, str, FakeResponse | Exception]] = [
+            ("GET", api.appliances_url, FakeResponse(401, {"error": "unauthorized"})),
+            *_successful_login_requests(api, access_token="replacement-access-token", refresh_token="replacement-refresh-token"),
+            ("GET", api.appliances_url, FakeResponse(401, {"error": "unauthorized"})),
+        ]
+
+        with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
+            with self.assertRaises(LifeConnectError) as ctx:
+                await api.get_appliances_json()
+
+        self.assertEqual(ctx.exception.status, 401)
+        self.assertEqual(api._access_token, "replacement-access-token")
         self.assertFalse(requests)
 
     def test_bapi_appliance_timeout_is_shorter_than_global_timeout(self) -> None:
