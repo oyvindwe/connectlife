@@ -14,6 +14,7 @@ from connectlife import api as api_module
 from connectlife.api import (
     BAPI_APPLIANCES_TIMEOUT,
     ConnectLifeApi,
+    DEFAULT_OAUTH_REDIRECT_URI,
     GATEWAY_DEVICE_LIST_URL,
     GATEWAY_UPDATE_URL,
     LEGACY_OAUTH_PROFILE,
@@ -254,14 +255,59 @@ class TestLoginRetry(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(api._access_token, "official-access-token")
         self.assertEqual(api._refresh_token, "official-refresh-token")
         self.assertEqual(authorize_payloads[0]["client_id"], LEGACY_OAUTH_PROFILE.client_id)
-        self.assertEqual(authorize_payloads[0]["redirect_uri"], LEGACY_OAUTH_PROFILE.redirect_uri)
+        self.assertEqual(authorize_payloads[0]["redirect_uri"], DEFAULT_OAUTH_REDIRECT_URI)
         self.assertEqual(authorize_payloads[1]["client_id"], LEGACY_OAUTH_PROFILE.client_id)
-        self.assertEqual(authorize_payloads[1]["redirect_uri"], LEGACY_OAUTH_PROFILE.redirect_uri)
+        self.assertEqual(authorize_payloads[1]["redirect_uri"], DEFAULT_OAUTH_REDIRECT_URI)
         self.assertEqual(authorize_payloads[2]["client_id"], OFFICIAL_OAUTH_PROFILE.client_id)
-        self.assertEqual(authorize_payloads[2]["redirect_uri"], OFFICIAL_OAUTH_PROFILE.redirect_uri)
+        self.assertEqual(authorize_payloads[2]["redirect_uri"], DEFAULT_OAUTH_REDIRECT_URI)
         self.assertEqual(token_payloads[0]["client_id"], OFFICIAL_OAUTH_PROFILE.client_id)
         self.assertEqual(token_payloads[0]["client_secret"], OFFICIAL_OAUTH_PROFILE.client_secret)
         self.assertFalse(requests)
+
+    async def test_login_uses_custom_redirect_uri_when_provided(self) -> None:
+        api = ConnectLifeApi(
+            "user@example.com",
+            "secret",
+            oauth_redirect_uri="https://example.com/oauth/callback",
+        )
+
+        requests: list[tuple[str, str, FakeResponse | Exception]] = [
+            (
+                "POST",
+                api.login_url,
+                FakeResponse(200, {"UID": "uid-1", "sessionInfo": {"cookieValue": "login-token"}}),
+            ),
+            ("POST", api.jwt_url, FakeResponse(200, {"id_token": "jwt-token"})),
+            ("POST", api.oauth2_authorize, FakeResponse(200, {"code": "auth-code"})),
+            (
+                "POST",
+                api.oauth2_token,
+                FakeResponse(200, {
+                    "access_token": "custom-access-token",
+                    "expires_in": 3600,
+                    "refresh_token": "custom-refresh-token",
+                }),
+            ),
+        ]
+
+        authorize_payloads: list[dict[str, Any]] = []
+        token_payloads: list[dict[str, Any]] = []
+
+        def record_post(self: FakeSession, url: str, **kwargs: Any) -> FakeResponse:
+            if url == api.oauth2_authorize and "json" in kwargs:
+                authorize_payloads.append(kwargs["json"])
+            if url == api.oauth2_token and "data" in kwargs:
+                token_payloads.append(kwargs["data"])
+            return FakeSession._next(self, "POST", url)
+
+        with (
+            patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)),
+            patch.object(FakeSession, "post", new=record_post),
+        ):
+            await api.login()
+
+        self.assertEqual(authorize_payloads[0]["redirect_uri"], "https://example.com/oauth/callback")
+        self.assertEqual(token_payloads[0]["redirect_uri"], "https://example.com/oauth/callback")
 
 
 class TestAppliancesReauth(unittest.IsolatedAsyncioTestCase):
@@ -295,7 +341,7 @@ class TestAppliancesReauth(unittest.IsolatedAsyncioTestCase):
             *_successful_login_requests(api, access_token="replacement-access-token", refresh_token="replacement-refresh-token"),
             ("GET", api.appliances_url, FakeResponse(500, {"error": "backend unavailable"})),
             (
-                "GET",
+                "POST",
                 GATEWAY_DEVICE_LIST_URL,
                 FakeResponse(200, {"response": {"resultCode": 0, "deviceList": [{"deviceId": "device-1"}]}}),
             ),
@@ -316,7 +362,7 @@ class TestAppliancesReauth(unittest.IsolatedAsyncioTestCase):
         requests: list[tuple[str, str, FakeResponse | Exception]] = [
             ("GET", api.appliances_url, TimeoutError()),
             (
-                "GET",
+                "POST",
                 GATEWAY_DEVICE_LIST_URL,
                 FakeResponse(200, {"response": {"resultCode": 0, "deviceList": [{"deviceId": "device-1"}]}}),
             ),
@@ -505,6 +551,7 @@ class TestTransportErrorRetry(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(LifeConnectAuthError) as ctx:
                 await api.login()
             self.assertIn("connection refused", str(ctx.exception))
+            self.assertIsInstance(ctx.exception.__cause__, aiohttp.ClientConnectionError)
 
 
 class TestAuthenticate(unittest.IsolatedAsyncioTestCase):
