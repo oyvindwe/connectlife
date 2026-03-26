@@ -341,7 +341,7 @@ class TestAppliancesReauth(unittest.IsolatedAsyncioTestCase):
             *_successful_login_requests(api, access_token="replacement-access-token", refresh_token="replacement-refresh-token"),
             ("GET", api.appliances_url, FakeResponse(500, {"error": "backend unavailable"})),
             (
-                "POST",
+                "GET",
                 GATEWAY_DEVICE_LIST_URL,
                 FakeResponse(200, {"response": {"resultCode": 0, "deviceList": [{"deviceId": "device-1"}]}}),
             ),
@@ -362,7 +362,27 @@ class TestAppliancesReauth(unittest.IsolatedAsyncioTestCase):
         requests: list[tuple[str, str, FakeResponse | Exception]] = [
             ("GET", api.appliances_url, TimeoutError()),
             (
-                "POST",
+                "GET",
+                GATEWAY_DEVICE_LIST_URL,
+                FakeResponse(200, {"response": {"resultCode": 0, "deviceList": [{"deviceId": "device-1"}]}}),
+            ),
+        ]
+
+        with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
+            result = await api.get_appliances_json()
+
+        self.assertEqual(result, [{"deviceId": "device-1"}])
+        self.assertFalse(requests)
+
+    async def test_appliance_list_gateway_fallback_uses_get(self) -> None:
+        api = ConnectLifeApi("user@example.com", "secret")
+        api._access_token = "cached-access-token"
+        api._expires = dt.datetime.now() + dt.timedelta(minutes=5)
+
+        requests: list[tuple[str, str, FakeResponse | Exception]] = [
+            ("GET", api.appliances_url, TimeoutError()),
+            (
+                "GET",
                 GATEWAY_DEVICE_LIST_URL,
                 FakeResponse(200, {"response": {"resultCode": 0, "deviceList": [{"deviceId": "device-1"}]}}),
             ),

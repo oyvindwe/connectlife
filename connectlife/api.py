@@ -242,6 +242,7 @@ class ConnectLifeApi:
             GATEWAY_DEVICE_LIST_URL,
             payload={},
             retry_on_reauth=retry_on_reauth,
+            method="GET",
         )
         device_list = gateway_response.get("deviceList")
         if not isinstance(device_list, list):
@@ -512,15 +513,24 @@ class ConnectLifeApi:
         *,
         payload: dict[str, Any],
         retry_on_reauth: bool,
+        method: str = "POST",
     ) -> dict[str, Any]:
         request_data = self._gateway_request_data(payload)
 
         async with self._client_session() as session:
-            async with session.post(
-                url,
-                json=request_data,
-                headers={"User-Agent": GATEWAY_USER_AGENT},
-            ) as response:
+            request = session.get if method == "GET" else session.post
+            request_kwargs: dict[str, Any]
+            if method == "GET":
+                request_kwargs = {
+                    "params": request_data,
+                    "headers": {"User-Agent": GATEWAY_USER_AGENT},
+                }
+            else:
+                request_kwargs = {
+                    "json": request_data,
+                    "headers": {"User-Agent": GATEWAY_USER_AGENT},
+                }
+            async with request(url, **request_kwargs) as response:
                 if response.status != 200:
                     body = await self._read_response_body(response)
                     raise self._response_error(
@@ -551,6 +561,7 @@ class ConnectLifeApi:
                 url,
                 payload=payload,
                 retry_on_reauth=False,
+                method=method,
             )
 
         error_type = LifeConnectAuthError if error_code == GATEWAY_INVALID_ACCESS_TOKEN else LifeConnectError
