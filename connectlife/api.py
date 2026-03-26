@@ -174,18 +174,16 @@ class ConnectLifeApi:
             return await self._request_appliances_json(retry_on_reauth=True)
         except LifeConnectAuthError:
             raise
-        except (aiohttp.ClientError, TimeoutError) as err:
+        except (aiohttp.ClientError, TimeoutError):
             _LOGGER.warning(
-                "ConnectLife appliance list request failed via bapi, trying HijuConn gateway: %s",
-                err,
+                "ConnectLife appliance list request failed via bapi, trying HijuConn gateway..."
             )
             return await self._request_gateway_appliances_json(retry_on_reauth=True)
         except LifeConnectError as err:
             if not self._should_fallback_to_gateway(err):
                 raise
             _LOGGER.warning(
-                "ConnectLife appliance list request failed via bapi with status=%s, trying HijuConn gateway",
-                err.status,
+                "ConnectLife appliance list request failed via bapi, trying HijuConn gateway..."
             )
             return await self._request_gateway_appliances_json(retry_on_reauth=True)
 

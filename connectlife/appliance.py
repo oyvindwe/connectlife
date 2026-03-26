@@ -1,7 +1,10 @@
+import logging
 import datetime as dt
 import re
 from enum import StrEnum
 from typing import Dict
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class DeviceType(StrEnum):
@@ -62,7 +65,15 @@ class ConnectLifeAppliance:
         self._bind_time = dt.datetime.fromtimestamp(data["bindTime"]/1000) if data["bindTime"] else None
         self._use_time = dt.datetime.fromtimestamp(data["useTime"]/1000) if data["useTime"] else None
         self._create_time = dt.datetime.fromtimestamp(data["createTime"]/1000) if data["createTime"] else None
-        self._status_list = {k: convert(v) for k, v in data["statusList"].items()}
+        raw_status_list = data.get("statusList")
+        if not isinstance(raw_status_list, dict):
+            _LOGGER.warning(
+                "ConnectLife appliance %s payload %s statusList; using empty status list",
+                self._device_id,
+                "is missing" if raw_status_list is None else f"has invalid {type(raw_status_list).__name__}",
+            )
+            raw_status_list = {}
+        self._status_list = {k: convert(v) for k, v in raw_status_list.items()}
         self._device_type = DEVICE_TYPES[self._device_type_code] \
             if self._device_type_code in DEVICE_TYPES \
             else DeviceType.UNKNOWN
