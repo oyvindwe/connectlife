@@ -397,11 +397,18 @@ class TestAppliancesReauth(unittest.IsolatedAsyncioTestCase):
             ),
         ]
 
-        with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
+        with (
+            patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)),
+            self.assertLogs("connectlife.api", level="WARNING") as captured,
+        ):
             result = await api.get_appliances_json()
 
         self.assertEqual(result, [{"deviceId": "device-1"}])
         self.assertEqual(api._access_token, "replacement-access-token")
+        self.assertEqual(
+            captured.output[-1],
+            "WARNING:connectlife.api:ConnectLife appliance list request failed via bapi, trying HijuConn gateway...",
+        )
         self.assertFalse(requests)
 
     async def test_appliances_request_falls_back_to_gateway_after_timeout(self) -> None:
@@ -418,10 +425,17 @@ class TestAppliancesReauth(unittest.IsolatedAsyncioTestCase):
             ),
         ]
 
-        with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
+        with (
+            patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)),
+            self.assertLogs("connectlife.api", level="WARNING") as captured,
+        ):
             result = await api.get_appliances_json()
 
         self.assertEqual(result, [{"deviceId": "device-1"}])
+        self.assertEqual(
+            captured.output[0],
+            "WARNING:connectlife.api:ConnectLife appliance list request failed via bapi, trying HijuConn gateway...",
+        )
         self.assertFalse(requests)
 
     async def test_appliance_list_gateway_fallback_uses_get(self) -> None:
