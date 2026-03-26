@@ -118,6 +118,35 @@ def _successful_login_requests(
     ]
 
 
+def _appliance_payload(
+    *,
+    device_id: str = "device-1",
+    status_list: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return a minimal appliance payload."""
+    payload = {
+        "wifiId": "wifi-1",
+        "deviceId": device_id,
+        "puid": "puid-1",
+        "deviceNickName": "Kitchen AC",
+        "deviceFeatureCode": "009-100",
+        "deviceFeatureName": "Air Conditioner",
+        "deviceTypeCode": "009",
+        "deviceTypeName": "Air Conditioner",
+        "role": 1,
+        "roomId": 1,
+        "roomName": "Kitchen",
+        "offlineState": 0,
+        "seq": 1,
+        "bindTime": 0,
+        "useTime": 0,
+        "createTime": 0,
+    }
+    if status_list is not None:
+        payload["statusList"] = status_list
+    return payload
+
+
 class TestRefreshFallback(unittest.IsolatedAsyncioTestCase):
     """Token refresh failure should fall back to a full login."""
 
@@ -312,6 +341,27 @@ class TestLoginRetry(unittest.IsolatedAsyncioTestCase):
 
 class TestAppliancesReauth(unittest.IsolatedAsyncioTestCase):
     """Transient failures on appliance requests should trigger re-auth and retry."""
+
+    async def test_get_appliances_uses_empty_status_list_when_missing(self) -> None:
+        api = ConnectLifeApi("user@example.com", "secret")
+        api._access_token = "cached-access-token"
+        api._expires = dt.datetime.now() + dt.timedelta(minutes=5)
+
+        requests: list[tuple[str, str, FakeResponse]] = [
+            ("GET", api.appliances_url, FakeResponse(200, [_appliance_payload()])),
+        ]
+
+        with (
+            patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)),
+            self.assertLogs("connectlife.appliance", level="WARNING") as captured,
+        ):
+            appliances = await api.get_appliances()
+
+        self.assertEqual(len(appliances), 1)
+        self.assertEqual(appliances[0].device_id, "device-1")
+        self.assertEqual(appliances[0].status_list, {})
+        self.assertIn("payload is missing statusList", captured.output[0])
+        self.assertFalse(requests)
 
     async def test_appliances_request_reauths_after_transient_server_error(self) -> None:
         api = ConnectLifeApi("user@example.com", "secret")
