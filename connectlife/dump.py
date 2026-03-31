@@ -25,10 +25,11 @@ async def main(username: str, password: str, format: str):
             with open(f'{appliance["deviceTypeCode"]}-{appliance["deviceFeatureCode"]}.json', 'w') as f:
                 json.dump(order_dict(appliance), f, indent=2)
         if format == "dd":
+            status_list = appliance.get("statusList", {})
             with open(f'{appliance["deviceTypeCode"]}-{appliance["deviceFeatureCode"]}.yaml', 'w') as f:
                 f.write(f'# {appliance["deviceNickName"]}\n')
                 f.write('properties:\n')
-                for k, v in sorted(appliance["statusList"].items()):
+                for k, v in sorted(status_list.items()):
                     f.write(f'- property: {k}\n')
                     f.write(f'  # Sample value: {v}\n')
 

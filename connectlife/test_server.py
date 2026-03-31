@@ -35,47 +35,48 @@ async def token(request):
         text='{"access_token": "my_access_token", "expires_in": 86400, "refresh_token": "my_refresh_token"}'
     )
 
-async def get_appliances(request):
+def _gateway_ok(data=None):
+    """Return a successful HijuConn gateway response."""
+    response = {"resultCode": 0}
+    if data is not None:
+        response.update(data)
+    return web.Response(
+        content_type="application/json",
+        text=json.dumps({"response": response}),
+    )
+
+def _gateway_error(error_code, error_desc):
+    """Return an error HijuConn gateway response."""
+    return web.Response(
+        content_type="application/json",
+        text=json.dumps({"response": {
+            "resultCode": 1,
+            "errorCode": error_code,
+            "errorDesc": error_desc,
+        }}),
+    )
+
+async def get_device_status_list(request):
     if failure_rate > randrange(100):
         return web.Response(status=500)
     if timeout_rate > randrange(100):
         await asyncio.sleep(10.1)
-    return web.Response(
-        content_type="application/json",
-        text=json.dumps(list(appliances.values()))
-    )
+    return _gateway_ok({"deviceList": list(appliances.values())})
 
-async def update_appliance(request):
+async def property_set(request):
     req = await request.json()
-    if req["puid"] in appliances:
-        appliance = appliances[req["puid"]]
-        if all(k in appliance["statusList"] for k in req["properties"]):
-            for key in req["properties"]:
-                appliance["statusList"][key] = req["properties"][key]
-            return web.Response(
-                content_type="application/json",
-                text=json.dumps({"resultCode": 0, "kvMap": None, "errorCode":0, "errorDesc": None})
-            )
-        unknowns = [key for key in req["properties"] if key not in appliance["statusList"]]
-        return web.Response(
-            content_type="application/json",
-            text=json.dumps({
-                "resultCode": -1,
-                "kvMap": None,
-                "errorCode": 400,
-                "errorDesc": f"Unknown properties {unknowns}"
-            })
-        )
-    else:
-        return web.Response(
-            content_type="application/json",
-            text=json.dumps({
-                "resultCode": -1,
-                "kvMap": None,
-                "errorCode": 404,
-                "errorDesc": f'Unknown puid {req["puid"]}'
-            })
-        )
+    puid = req.get("puid")
+    properties = req.get("properties", {})
+    if puid not in appliances:
+        return _gateway_error(404, f"Unknown puid {puid}")
+    appliance = appliances[puid]
+    unknowns = [key for key in properties if key not in appliance["statusList"]]
+    if unknowns:
+        return _gateway_error(400, f"Unknown properties {unknowns}")
+    for key in properties:
+        appliance["statusList"][key] = properties[key]
+    return _gateway_ok()
+
 def main(args):
     filenames = list(filter(lambda f: f[-5:] == ".json", [f for f in listdir(".") if isfile(join(".", f))]))
     for filename in filenames:
@@ -91,8 +92,8 @@ def main(args):
     app.add_routes([web.post('/accounts.getJWT', get_jwt)])
     app.add_routes([web.post('/oauth/authorize', authorize)])
     app.add_routes([web.post('/oauth/token', token)])
-    app.add_routes([web.get('/appliances', get_appliances)])
-    app.add_routes([web.post('/appliances', update_appliance)])
+    app.add_routes([web.get('/clife-svc/pu/get_device_status_list', get_device_status_list)])
+    app.add_routes([web.post('/device/pu/property/set', property_set)])
     web.run_app(app, port=args.port)
 
 if __name__ == '__main__':
