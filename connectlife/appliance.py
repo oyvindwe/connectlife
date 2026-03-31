@@ -151,8 +151,8 @@ class ConnectLifeAppliance:
         return self._device_type
 
 
-def convert(value: str | float) -> float | int | str | dt.datetime:
-    if isinstance(value, float):
+def convert(value: str | float | int | dt.datetime) -> float | int | str | dt.datetime:
+    if isinstance(value, (int, float, dt.datetime)):
         return value
     try:
         return int(value)

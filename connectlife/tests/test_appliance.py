@@ -30,3 +30,10 @@ class TestAppliance(unittest.TestCase):
 
     def test_convert_str(self):
         self.assertEqual("string", convert("string"))
+
+    def test_convert_already_converted(self):
+        """convert() should be idempotent for all output types."""
+        self.assertEqual(42, convert(42))
+        self.assertEqual(0.67, convert(0.67))
+        d = dt.datetime(2024, 9, 12, 21, 25, 33, tzinfo=dt.UTC)
+        self.assertEqual(d, convert(d))

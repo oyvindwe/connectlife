@@ -255,6 +255,60 @@ class TestGetAppliances(unittest.IsolatedAsyncioTestCase):
         self.assertIn("no statusList available", captured.output[0])
         self.assertFalse(requests)
 
+    async def test_get_appliances_drops_new_device_without_status_list_while_keeping_cached(self) -> None:
+        api = ConnectLifeApi("user@example.com", "secret")
+        api._access_token = "cached-access-token"
+        api._expires = dt.datetime.now() + dt.timedelta(minutes=5)
+
+        # First fetch — device-1 has statusList
+        first_requests: list[tuple[str, str, FakeResponse]] = [
+            ("GET", GATEWAY_DEVICE_LIST_URL, _gateway_device_list_response([
+                _appliance_payload(device_id="device-1", status_list={"t_temp": "22"}),
+            ])),
+        ]
+        with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(first_requests)):
+            await api.get_appliances()
+
+        # Second fetch — device-1 missing statusList (use cache), device-2 new without statusList (drop)
+        second_requests: list[tuple[str, str, FakeResponse]] = [
+            ("GET", GATEWAY_DEVICE_LIST_URL, _gateway_device_list_response([
+                _appliance_payload(device_id="device-1"),
+                _appliance_payload(device_id="device-2"),
+            ])),
+        ]
+        with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(second_requests)):
+            appliances = await api.get_appliances()
+
+        self.assertEqual(len(appliances), 1)
+        self.assertEqual(appliances[0].device_id, "device-1")
+        self.assertEqual(appliances[0].status_list, {"t_temp": 22})
+
+    async def test_get_appliances_preserves_cached_datetime_status_values(self) -> None:
+        api = ConnectLifeApi("user@example.com", "secret")
+        api._access_token = "cached-access-token"
+        api._expires = dt.datetime.now() + dt.timedelta(minutes=5)
+
+        # First fetch with a datetime-formatted status value
+        first_requests: list[tuple[str, str, FakeResponse]] = [
+            ("GET", GATEWAY_DEVICE_LIST_URL, _gateway_device_list_response([
+                _appliance_payload(status_list={"t_temp": "22", "last_run": "2026/03/31T12:00:00"}),
+            ])),
+        ]
+        with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(first_requests)):
+            appliances = await api.get_appliances()
+        self.assertIsInstance(appliances[0].status_list["last_run"], dt.datetime)
+
+        # Second fetch without statusList — should use cached value including datetime
+        second_requests: list[tuple[str, str, FakeResponse]] = [
+            ("GET", GATEWAY_DEVICE_LIST_URL, _gateway_device_list_response([_appliance_payload()])),
+        ]
+        with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(second_requests)):
+            appliances = await api.get_appliances()
+
+        self.assertEqual(len(appliances), 1)
+        self.assertEqual(appliances[0].status_list["t_temp"], 22)
+        self.assertIsInstance(appliances[0].status_list["last_run"], dt.datetime)
+
     async def test_get_appliances_preserves_cached_status_list_when_missing(self) -> None:
         api = ConnectLifeApi("user@example.com", "secret")
         api._access_token = "cached-access-token"
@@ -345,10 +399,25 @@ class TestGetAppliances(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(requests)
 
 
-class TestNonJsonResponse(unittest.IsolatedAsyncioTestCase):
-    """Non-JSON responses should raise LifeConnectError with a descriptive message."""
+class TestGatewayErrors(unittest.IsolatedAsyncioTestCase):
+    """Gateway response errors should raise descriptive exceptions."""
 
-    async def test_get_appliances_json_raises_lifeconnect_error_for_html_body(self) -> None:
+    async def test_get_appliances_raises_on_missing_response_key(self) -> None:
+        api = ConnectLifeApi("user@example.com", "secret")
+        api._access_token = "cached-access-token"
+        api._expires = dt.datetime.now() + dt.timedelta(minutes=5)
+
+        requests: list[tuple[str, str, FakeResponse]] = [
+            ("GET", GATEWAY_DEVICE_LIST_URL, FakeResponse(200, {"unexpected": "body"})),
+        ]
+
+        with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
+            with self.assertRaises(LifeConnectError) as ctx:
+                await api.get_appliances_json()
+
+        self.assertIn("missing 'response'", str(ctx.exception))
+
+    async def test_get_appliances_raises_lifeconnect_error_for_html_body(self) -> None:
         api = ConnectLifeApi("user@example.com", "secret")
         api._access_token = "cached-access-token"
         api._expires = dt.datetime.now() + dt.timedelta(minutes=5)
@@ -360,6 +429,19 @@ class TestNonJsonResponse(unittest.IsolatedAsyncioTestCase):
         with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
             with self.assertRaises(LifeConnectError) as ctx:
                 await api.get_appliances_json()
+
+        self.assertIn("Non-JSON response", str(ctx.exception))
+
+    async def test_login_raises_auth_error_for_html_body(self) -> None:
+        api = ConnectLifeApi("user@example.com", "secret")
+
+        requests: list[tuple[str, str, FakeResponse]] = [
+            ("POST", api.login_url, FakeResponse(200, "<html>Service Unavailable</html>")),
+        ]
+
+        with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
+            with self.assertRaises(LifeConnectAuthError) as ctx:
+                await api.login()
 
         self.assertIn("Non-JSON response", str(ctx.exception))
 
@@ -456,6 +538,27 @@ class TestGatewayWrites(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(LifeConnectError):
                 await api.update_appliance("puid-1", {"t_temp": "22"})
 
+        self.assertFalse(requests)
+
+
+class TestRefreshTransportError(unittest.IsolatedAsyncioTestCase):
+    """Transport errors during token refresh should fall back to full login."""
+
+    async def test_refresh_transport_error_falls_back_to_full_login(self) -> None:
+        api = ConnectLifeApi("user@example.com", "secret")
+        api._access_token = "expired-token"
+        api._refresh_token = "valid-refresh"
+        api._expires = dt.datetime.now() - dt.timedelta(seconds=1)
+
+        requests: list[tuple[str, str, FakeResponse | Exception]] = [
+            ("POST", api.oauth2_token, TimeoutError()),
+            *_successful_login_requests(api),
+        ]
+
+        with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
+            await api._fetch_access_token()
+
+        self.assertEqual(api._access_token, "new-access-token")
         self.assertFalse(requests)
 
 
