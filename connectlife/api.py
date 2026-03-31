@@ -307,7 +307,7 @@ class ConnectLifeApi:
             uid = self._require_auth_field(body, "UID")
             session_info = self._require_auth_field(body, "sessionInfo")
             if "cookieValue" not in session_info:
-                _LOGGER.info("Missing 'sessionInfo.cookieValue' in response: %s", body)
+                _LOGGER.debug("Missing 'sessionInfo.cookieValue' in response: %s", body)
                 raise LifeConnectAuthError("Missing 'sessionInfo.cookieValue' in response")
             return uid, session_info["cookieValue"]
 
@@ -586,14 +586,14 @@ class ConnectLifeApi:
     async def _read_response_body(response: aiohttp.ClientResponse) -> str:
         text = await response.text()
         _LOGGER.debug("Response status code: %s", response.status)
-        _LOGGER.debug(response.headers)
+        _LOGGER.debug("Response headers: %s", response.headers)
         _LOGGER.debug(text)
         return text
 
     @staticmethod
     def _require_auth_field(response: dict[str, Any], field: str) -> Any:
         if field not in response:
-            _LOGGER.info("Missing '%s' in response: %s", field, response)
+            _LOGGER.debug("Missing '%s' in response: %s", field, response)
             raise LifeConnectAuthError(f"Missing '{field}' in response")
         return response[field]
 
