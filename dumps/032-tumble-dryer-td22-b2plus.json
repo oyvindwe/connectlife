@@ -91,8 +91,7 @@
     "Washer_to_Dryer_program_ID": "255",
     "Washer_to_Dryersetting_status": "0",
     "Washer_to_dryerwizard_trigger_status": "0",
-    "Water_level_switch": "0",
-    "daily_energy_kwh": 0
+    "Water_level_switch": "0"
   },
   "useTime": 1737129891904,
   "wifiId": "<redacted>"

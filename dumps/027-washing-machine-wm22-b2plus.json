@@ -168,8 +168,7 @@
     "Turbidity_sensor_setting_status": "0",
     "Units_setting_status": "0",
     "Volume_setting": "0",
-    "Water_hardness_setting_status": "0",
-    "daily_energy_kwh": 0
+    "Water_hardness_setting_status": "0"
   },
   "useTime": 1737129803685,
   "wifiId": "<redacted>"

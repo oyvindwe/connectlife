@@ -200,8 +200,7 @@
     "stoprunning_flag": "0",
     "DrumCleanWashCount": "0",
     "Degerming_State": "0",
-    "AquaPreserve_Flag": "0",
-    "daily_energy_kwh": 0
+    "AquaPreserve_Flag": "0"
   },
   "useTime": 1694675286293,
   "offlineState": 1,

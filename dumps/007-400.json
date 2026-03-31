@@ -14,7 +14,6 @@
   "roomName": "Living Room",
   "seq": 0,
   "statusList": {
-    "daily_energy_kwh": 0,
     "f_e_filterclean": "0",
     "f_e_pump": "0",
     "f_e_push": "0",

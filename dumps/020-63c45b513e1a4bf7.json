@@ -112,8 +112,7 @@
     "SL6_Status": "0",
     "SL6_Zone_shape": "8345",
     "Total_time_of_cooking_in_hours": "501",
-    "Zone_number": "5",
-    "daily_energy_kwh": 0
+    "Zone_number": "5"
   },
   "useTime": 1718777465392,
   "wifiId": "<redacted>"

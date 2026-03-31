@@ -38,8 +38,7 @@
     "Delay_off_time": "0",
     "Maximum_motor_level": "5",
     "Alarm_grease_filter": "0",
-    "Alarm_recirculation_filter1": "0",
-    "daily_energy_kwh": 0
+    "Alarm_recirculation_filter1": "0"
   },
   "useTime": 0,
   "offlineState": 1,
