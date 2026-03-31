@@ -33,6 +33,7 @@ GATEWAY_USER_AGENT = f"connectlife/{_VERSION}"
 GATEWAY_BASE_URL = "https://clife-eu-gateway.hijuconn.com"
 GATEWAY_DEVICE_LIST_URL = f"{GATEWAY_BASE_URL}/clife-svc/pu/get_device_status_list"
 GATEWAY_UPDATE_URL = f"{GATEWAY_BASE_URL}/device/pu/property/set"
+GATEWAY_ENERGY_URL = f"{GATEWAY_BASE_URL}/clife-svc/pu/air_duct_energy"
 GATEWAY_APP_ID = "47110565134383"
 GATEWAY_APP_SECRET = "yOzhz6junYno-nmULM3Wr7PU_dpSZN22ZdluvVWZ4uW5ZwwG8fIGCHTbrhcnU-iv"
 GATEWAY_LANGUAGE_ID = "12"
@@ -94,6 +95,7 @@ class ConnectLifeApi:
 
     gateway_device_list_url = GATEWAY_DEVICE_LIST_URL
     gateway_update_url = GATEWAY_UPDATE_URL
+    gateway_energy_url = GATEWAY_ENERGY_URL
 
     def __init__(
         self,
@@ -110,6 +112,7 @@ class ConnectLifeApi:
             self.oauth2_redirect_uri = f"{test_server}/swagger/oauth2-redirect.html"
             self.gateway_device_list_url = f"{test_server}/clife-svc/pu/get_device_status_list"
             self.gateway_update_url = f"{test_server}/device/pu/property/set"
+            self.gateway_energy_url = f"{test_server}/clife-svc/pu/air_duct_energy"
 
         self._username = username
         self._password = password
@@ -154,6 +157,39 @@ class ConnectLifeApi:
             data, retry_on_reauth=True, retry_on_randstr=True,
         )
 
+    async def get_daily_energy_kwh(
+        self,
+        puid: str,
+        device_type_code: str,
+        device_feature_code: str,
+    ) -> float | None:
+        """Fetch today's energy consumption in kWh for a device.
+
+        Returns None if the energy endpoint fails for this device.
+        """
+        await self._fetch_access_token()
+        today = dt.date.today().isoformat()
+        try:
+            response = await self._request_gateway_json(
+                self.gateway_energy_url,
+                payload={
+                    "puid": puid,
+                    "statType": "day",
+                    "dateStart": today,
+                    "dateEnd": today,
+                    "curve": "1",
+                    "deviceType": device_type_code,
+                    "featureCode": device_feature_code,
+                },
+                retry_on_reauth=True,
+            )
+            result_data = response.get("resultData")
+            if isinstance(result_data, dict):
+                return result_data.get("electricTotal")
+        except (LifeConnectError, aiohttp.ClientError, TimeoutError) as err:
+            _LOGGER.debug("Energy fetch failed for %s: %s", puid, err)
+        return None
+
     def _normalize_appliance_payloads(self, payloads: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Preserve cached statusList when upstream omits it."""
         cached = {a.device_id: a.status_list for a in self.appliances}
@@ -194,6 +230,7 @@ class ConnectLifeApi:
             self.gateway_device_list_url,
             payload={},
             retry_on_reauth=retry_on_reauth,
+            retry_on_randstr=True,
             method="GET",
         )
         device_list = gateway_response.get("deviceList")

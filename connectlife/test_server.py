@@ -77,6 +77,13 @@ async def property_set(request):
         appliance["statusList"][key] = properties[key]
     return _gateway_ok()
 
+async def air_duct_energy(request):
+    req = await request.json()
+    puid = req.get("puid")
+    if puid not in appliances:
+        return _gateway_error(404, f"Unknown puid {puid}")
+    return _gateway_ok({"resultData": {"electricTotal": 0.0, "durationTotal": 0}})
+
 def main(args):
     filenames = list(filter(lambda f: f[-5:] == ".json", [f for f in listdir(".") if isfile(join(".", f))]))
     for filename in filenames:
@@ -94,6 +101,7 @@ def main(args):
     app.add_routes([web.post('/oauth/token', token)])
     app.add_routes([web.get('/clife-svc/pu/get_device_status_list', get_device_status_list)])
     app.add_routes([web.post('/device/pu/property/set', property_set)])
+    app.add_routes([web.post('/clife-svc/pu/air_duct_energy', air_duct_energy)])
     web.run_app(app, port=args.port)
 
 if __name__ == '__main__':
