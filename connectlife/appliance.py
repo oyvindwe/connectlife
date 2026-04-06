@@ -159,6 +159,10 @@ def convert(value: str | float | int | dt.datetime) -> float | int | str | dt.da
     except ValueError:
         pass
     try:
+        return float(value)
+    except ValueError:
+        pass
+    try:
         # Unknown if timezone depends on property or appliance. Some properties include UTC in the name.
         # Extreme values observed:
         # "0002/11/30T00:00:00" (probably represents no value)

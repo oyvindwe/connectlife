@@ -13,6 +13,9 @@ class TestAppliance(unittest.TestCase):
 
     def test_convert_float(self):
         self.assertEqual(0.67, convert(0.67))
+        self.assertEqual(23.5, convert("23.5"))
+        self.assertEqual(-1.5, convert("-1.5"))
+        self.assertEqual(0.0, convert("0.0"))
 
     def test_convert_datetime(self):
         self.assertEqual(
