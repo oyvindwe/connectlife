@@ -49,8 +49,7 @@
       "f_e_clockchip_fault": "0",
       "f_e_eanode_fault": "0",
       "f_e_powermodule_fault": "0",
-      "oem_host_version": "S1798.6.01.06.RB",
-      "daily_energy_kwh": 0
+      "oem_host_version": "S1798.6.01.06.RB"
     },
     "useTime": 0,
     "offlineState": 1,

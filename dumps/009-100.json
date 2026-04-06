@@ -15,7 +15,6 @@
   "roomName": "default_room",
   "seq": 0,
   "statusList": {
-    "daily_energy_kwh": 0.64,
     "f_e_arkgrille": "0",
     "f_e_incoiltemp": "0",
     "f_e_incom": "0",

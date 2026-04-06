@@ -67,8 +67,7 @@
     "AlarmRecirculationFilter1": "1",
     "DeviceStatus": "1",
     "CleanAirDurationOfCycleInMinutes": "10",
-    "RecirculationFilter1Status": "1",
-    "daily_energy_kwh": 0
+    "RecirculationFilter1Status": "1"
   },
   "useTime": 0,
   "offlineState": 1,

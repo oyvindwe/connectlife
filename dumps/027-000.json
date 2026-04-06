@@ -216,8 +216,7 @@
     "Turbidity_sensor_setting_status": "3",
     "Alarm_1": "1",
     "Selected_program_Eco_Green_mode": "0",
-    "Softener_indicator": "0",
-    "daily_energy_kwh": 0
+    "Softener_indicator": "0"
   },
   "useTime": 0,
   "offlineState": 1,

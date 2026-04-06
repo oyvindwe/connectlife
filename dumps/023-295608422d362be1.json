@@ -68,8 +68,7 @@
     "Sand_timer2_start_utc_datetime_bdc_timestamp": "2023/12/13T11:34:47",
     "Sand_timer2_status": "1",
     "Sand_timer3_start_utc_datetime_bdc_timestamp": "2023/12/13T11:35:2",
-    "Sand_timer3_status": "1",
-    "daily_energy_kwh": 0
+    "Sand_timer3_status": "1"
   },
   "useTime": 0,
   "offlineState": 1,
