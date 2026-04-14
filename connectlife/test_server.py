@@ -10,8 +10,14 @@ from os.path import isfile, join
 appliances = {}
 failure_rate = 0
 timeout_rate = 0
+auth_error_rate = 0
 
-async def login(request):
+async def login(request):  # noqa: ARG001
+    if auth_error_rate > randrange(100):
+        return web.Response(
+            content_type="application/json",
+            text='{"errorCode": 403042, "errorMessage": "Invalid LoginID", "errorDetails": "invalid loginID or password"}'
+        )
     return web.Response(
         content_type="application/json",
         text='{"UID": "123", "sessionInfo":{"cookieValue": "my_login_token"}}'
@@ -107,9 +113,11 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='ConnectLife API test server')
     parser.add_argument('-p', '--port', type=int, default=8080, help='Port on which to serve the web app')
-    parser.add_argument('-f', '--failure_rate', type=int, default=0, help='Failure rate in % for get appliances')
-    parser.add_argument('-t', '--timeout_rate', type=int, default=0, help='Timeout rate in % for get appliances')
+    parser.add_argument('-a', '--auth_error_rate', type=int, default=0, help='Auth error rate in %% for login')
+    parser.add_argument('-f', '--failure_rate', type=int, default=0, help='Failure rate in %% for get appliances')
+    parser.add_argument('-t', '--timeout_rate', type=int, default=0, help='Timeout rate in %% for get appliances')
     args = parser.parse_args()
+    auth_error_rate = args.auth_error_rate
     failure_rate = args.failure_rate
     timeout_rate = args.timeout_rate
     main(args)
