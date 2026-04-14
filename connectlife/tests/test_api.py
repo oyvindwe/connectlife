@@ -755,8 +755,9 @@ class TestTransportErrorRetry(unittest.IsolatedAsyncioTestCase):
             patch.object(api, "_initial_access_token", side_effect=always_fail),
             patch.object(api_module.asyncio, "sleep", return_value=None),
         ):
-            with self.assertRaises(LifeConnectAuthError) as ctx:
+            with self.assertRaises(LifeConnectError) as ctx:
                 await api.login()
+            self.assertNotIsInstance(ctx.exception, LifeConnectAuthError)
             self.assertIn("connection refused", str(ctx.exception))
             self.assertIsInstance(ctx.exception.__cause__, aiohttp.ClientConnectionError)
 

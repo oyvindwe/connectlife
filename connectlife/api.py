@@ -126,7 +126,7 @@ class ConnectLifeApi:
         """Test whether the full ConnectLife login flow succeeds."""
         try:
             await self.login()
-        except LifeConnectAuthError:
+        except LifeConnectError:
             return False
         return True
 
@@ -271,14 +271,14 @@ class ConnectLifeApi:
 
     async def _initial_access_token_with_retry(self) -> None:
         attempts = 2
-        last_error: LifeConnectAuthError | None = None
+        last_error: LifeConnectError | None = None
 
         for attempt in range(1, attempts + 1):
             try:
                 await self._initial_access_token()
                 return
             except (aiohttp.ClientError, TimeoutError) as err:
-                last_error = LifeConnectAuthError(f"Unexpected error during login: {err}")
+                last_error = LifeConnectError(f"Unexpected error during login: {err}")
                 last_error.__cause__ = err
                 if attempt == attempts:
                     break
@@ -305,7 +305,7 @@ class ConnectLifeApi:
 
         if last_error is not None:
             raise last_error
-        raise LifeConnectAuthError("Unexpected error during login")
+        raise LifeConnectError("Unexpected error during login")
 
     async def _initial_access_token(self) -> None:
         async with self._client_session() as session:
