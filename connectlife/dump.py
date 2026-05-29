@@ -6,6 +6,7 @@ import json
 import sys
 
 from .api import ConnectLifeApi
+from .trir import TrirConnectLifeApi
 
 
 def order_dict(dictionary):
@@ -13,8 +14,15 @@ def order_dict(dictionary):
             for k, v in sorted(dictionary.items())}
 
 
-async def main(username: str, password: str, format: str):
-    api = ConnectLifeApi(username, password)
+def build_api(username: str, password: str, trir: bool, device_uuid: str | None, platform: str):
+    if trir:
+        return TrirConnectLifeApi(
+            username, password, device_uuid=device_uuid, platform=platform
+        )
+    return ConnectLifeApi(username, password)
+
+
+async def main(api: ConnectLifeApi, format: str):
     appliances = await api.get_appliances_json()
     # Redact private fields
     for appliance in appliances:
@@ -51,6 +59,22 @@ if __name__ == "__main__":
         },
         default="json"
     )
+    parser.add_argument(
+        "-t",
+        "--trir",
+        action="store_true",
+        help="Use the TRIR (Russia/CIS) backend instead of the default",
+    )
+    parser.add_argument(
+        "--device-uuid",
+        help="TRIR only: stable device UUID (generated if omitted)",
+    )
+    parser.add_argument(
+        "--platform",
+        choices=["android", "ios"],
+        default="android",
+        help="TRIR only: app platform to emulate (default: android)",
+    )
     parser.add_argument("-v", "--verbose", action='store_true')
     args = parser.parse_args()
     username = args.username if args.username else input("Username: ")
@@ -64,4 +88,5 @@ if __name__ == "__main__":
         handler.setFormatter(formatter)
         logger.addHandler(handler)
 
-    asyncio.run(main(username, password, args.format))
+    api = build_api(username, password, args.trir, args.device_uuid, args.platform)
+    asyncio.run(main(api, args.format))
