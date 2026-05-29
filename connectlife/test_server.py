@@ -105,9 +105,10 @@ async def air_duct_energy(request):
     return _gateway_ok({"resultData": {"electricTotal": 0.0, "durationTotal": 0}})
 
 def main(args):
-    filenames = list(filter(lambda f: f[-5:] == ".json", [f for f in listdir(".") if isfile(join(".", f))]))
+    directory = args.directory
+    filenames = list(filter(lambda f: f[-5:] == ".json", [f for f in listdir(directory) if isfile(join(directory, f))]))
     for filename in filenames:
-        with (open(filename) as f):
+        with (open(join(directory, filename)) as f):
             appliance = json.load(f)
             appliance["deviceId"] = filename[0:-5]
             appliance["puid"] = f"puid{appliance['deviceId']}"
@@ -127,6 +128,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='ConnectLife API test server')
     parser.add_argument('-p', '--port', type=int, default=8080, help='Port on which to serve the web app')
+    parser.add_argument('-d', '--directory', default='.', help='Directory to read dump files from')
     parser.add_argument('-a', '--auth_error_rate', type=int, default=0, help='Auth error rate in %% for login')
     parser.add_argument('--auth_error_type', choices=list(LOGIN_ERRORS.keys()), default='invalid_login', help='Type of auth error to simulate')
     parser.add_argument('-f', '--failure_rate', type=int, default=0, help='Failure rate in %% for get appliances')

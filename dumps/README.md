@@ -4,6 +4,7 @@
 - [004](004.md): ASKO professional tumble dryer
 - [006](006.md): Air conditioner
 - [007](007.md): Dehumidifier
+- [008](008.md): Living Room AC
 - [009](009.md): Air conditioner
 - [010](010.md): ASKO induction hob
 - [012](012.md): ASKO hood
@@ -14,7 +15,7 @@
 - [021](021.md): ASKO hood
 - [023](023.md): Atag oven
 - [025](025.md): Washing Machine
-- [026](026.md): Hisense refrigerator
+- [026](026.md): Refrigerator
 - [027](027.md): Washing Machine
 - [030](030.md): Dryer
 - [032](032.md): Tumble Dryer
