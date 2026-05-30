@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 import datetime as dt
 import json
-from typing import Any
+from typing import Any, cast
 import unittest
 from unittest.mock import patch
 
@@ -50,7 +51,7 @@ class FakeResponse:
 class FakeSession:
     """Minimal aiohttp ClientSession stand-in with scripted responses."""
 
-    def __init__(self, requests: list[tuple[str, str, FakeResponse | Exception]]) -> None:
+    def __init__(self, requests: Sequence[tuple[str, str, FakeResponse | Exception]]) -> None:
         self._requests = requests
 
     async def __aenter__(self) -> "FakeSession":
@@ -68,7 +69,9 @@ class FakeSession:
     def _next(self, method: str, url: str) -> FakeResponse:
         if not self._requests:
             raise AssertionError(f"Unexpected {method} request to {url}")
-        expected_method, expected_url, response = self._requests.pop(0)
+        # Consumes the shared queue in place; callers assert it drains to empty.
+        queue = cast("list[tuple[str, str, FakeResponse | Exception]]", self._requests)
+        expected_method, expected_url, response = queue.pop(0)
         if expected_method != method or expected_url != url:
             raise AssertionError(
                 f"Expected {expected_method} {expected_url}, got {method} {url}"
@@ -81,7 +84,7 @@ class FakeSession:
 class FakeClientSessionFactory:
     """Factory returning fake sessions that share one scripted request queue."""
 
-    def __init__(self, requests: list[tuple[str, str, FakeResponse | Exception]]) -> None:
+    def __init__(self, requests: Sequence[tuple[str, str, FakeResponse | Exception]]) -> None:
         self._requests = requests
 
     def __call__(self, *args: Any, **kwargs: Any) -> FakeSession:
