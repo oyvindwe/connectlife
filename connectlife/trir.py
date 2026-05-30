@@ -85,11 +85,9 @@ TRIR_PASSWORD_PUBLIC_KEY = cast(
 TRIR_DEFAULT_TOKEN_LIFETIME = 7200
 TRIR_TOKEN_RENEW_MARGIN = 90
 
-# TODO(#267): confirm the gateway error codes TRIR uses. The EU values are a
-# reasonable starting guess given the shared infrastructure; if wrong, the only
-# effect is that the in-request reauth/randStr retry won't fire and the next
-# poll re-logs in instead.
+# Invalid/expired access token; confirmed against the live TRIR gateway.
 TRIR_INVALID_ACCESS_TOKEN = 100026
+# randStr check failure; inherited from the EU gateway value.
 TRIR_RANDSTR_CHECK_FAILED = 101005
 
 
@@ -222,7 +220,14 @@ class TrirConnectLifeApi(ConnectLifeApi):
                 "Unexpected response from TRIR gateway: missing 'deviceList'",
                 endpoint=self.gateway_device_list_url,
             )
-        return [self._normalize_trir_device(d) for d in device_list]
+        # Returned raw (not mapped onto the EU schema) so dumps record the
+        # actual TRIR payload; mapping happens in _normalize_appliance_payloads.
+        return device_list
+
+    def _normalize_appliance_payloads(self, payloads: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Map TRIR device payloads onto the EU schema before building appliances."""
+        payloads = [self._normalize_trir_device(p) for p in payloads]
+        return super()._normalize_appliance_payloads(payloads)
 
     @classmethod
     def _normalize_trir_device(cls, device: dict[str, Any]) -> dict[str, Any]:

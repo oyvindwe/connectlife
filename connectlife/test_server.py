@@ -237,7 +237,13 @@ def main(args):
             appliance = json.load(f)
             appliance["deviceId"] = filename[0:-5]
             appliance["puid"] = f"puid{appliance['deviceId']}"
-            appliance["deviceNickName"] = f'{appliance["deviceNickName"]} ({appliance["deviceTypeCode"]}-{appliance["deviceFeatureCode"]})'
+            # Expose both feature code fields so a single running server can
+            # serve EU (deviceFeatureCode) and TRIR (featureCode) clients,
+            # regardless of which dump format the base file uses.
+            feature = appliance.get("deviceFeatureCode") or appliance.get("featureCode")
+            appliance["deviceFeatureCode"] = feature
+            appliance["featureCode"] = feature
+            appliance["deviceNickName"] = f'{appliance["deviceNickName"]} ({appliance["deviceTypeCode"]}-{feature})'
             appliances[appliance["puid"]] = appliance
 
     app = web.Application()
