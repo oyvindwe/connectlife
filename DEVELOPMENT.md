@@ -12,7 +12,8 @@ uv sync
 
 ## Test server
 
-Test server that mocks the ConnectLife API. Runs on `http://localhost:8080`.
+Test server that emulates the ConnectLife API, both normal and TRIR variants at the same time.
+Runs on `http://localhost:8080`.
 
 The server reads all JSON files in the current directory, and serves them as appliances. Properties can be updated,
 but is not persisted. The only validation is that the `puid` and `property` exists, it assumes that all properties

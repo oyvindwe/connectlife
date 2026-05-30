@@ -97,6 +97,12 @@ class ConnectLifeApi:
     gateway_update_url = GATEWAY_UPDATE_URL
     gateway_energy_url = GATEWAY_ENERGY_URL
 
+    # Overridable so alternative backends (e.g. TRIR) can vary the client
+    # identity and the gateway error codes they react to.
+    gateway_user_agent = GATEWAY_USER_AGENT
+    invalid_access_token_code = GATEWAY_INVALID_ACCESS_TOKEN
+    randstr_check_failed_code = GATEWAY_RANDSTR_CHECK_FAILED
+
     def __init__(
         self,
         username: str,
@@ -481,12 +487,12 @@ class ConnectLifeApi:
             if method == "GET":
                 request_kwargs = {
                     "params": request_data,
-                    "headers": {"User-Agent": GATEWAY_USER_AGENT},
+                    "headers": {"User-Agent": self.gateway_user_agent},
                 }
             else:
                 request_kwargs = {
                     "json": request_data,
-                    "headers": {"User-Agent": GATEWAY_USER_AGENT},
+                    "headers": {"User-Agent": self.gateway_user_agent},
                 }
             async with request(url, **request_kwargs) as response:
                 if response.status != 200:
@@ -512,7 +518,7 @@ class ConnectLifeApi:
 
         error_code = gateway_response.get("errorCode")
         error_desc = gateway_response.get("errorDesc") or "Unknown gateway error"
-        if retry_on_reauth and error_code == GATEWAY_INVALID_ACCESS_TOKEN:
+        if retry_on_reauth and error_code == self.invalid_access_token_code:
             _LOGGER.warning("HijuConn gateway access token rejected, retrying full login")
             await self.login()
             return await self._request_gateway_json(
@@ -523,7 +529,7 @@ class ConnectLifeApi:
                 method=method,
             )
 
-        if retry_on_randstr and error_code == GATEWAY_RANDSTR_CHECK_FAILED:
+        if retry_on_randstr and error_code == self.randstr_check_failed_code:
             _LOGGER.warning("HijuConn gateway randStr check failed, retrying with fresh signature")
             return await self._request_gateway_json(
                 url,
@@ -533,7 +539,7 @@ class ConnectLifeApi:
                 method=method,
             )
 
-        error_type = LifeConnectAuthError if error_code == GATEWAY_INVALID_ACCESS_TOKEN else LifeConnectError
+        error_type = LifeConnectAuthError if error_code == self.invalid_access_token_code else LifeConnectError
         raise error_type(
             f"Unexpected response from HijuConn gateway: code={error_code} description='{error_desc}'",
             endpoint=url,

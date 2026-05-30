@@ -6,6 +6,7 @@ import json
 import sys
 
 from .api import ConnectLifeApi
+from .trir import TrirConnectLifeApi
 
 
 def order_dict(dictionary):
@@ -13,25 +14,71 @@ def order_dict(dictionary):
             for k, v in sorted(dictionary.items())}
 
 
-async def main(username: str, password: str, format: str):
-    api = ConnectLifeApi(username, password)
+def build_api(username: str, password: str, trir: bool):
+    if trir:
+        return TrirConnectLifeApi(username, password)
+    return ConnectLifeApi(username, password)
+
+
+def feature_code(appliance: dict) -> str | None:
+    # TRIR returns featureCode; the default backend returns deviceFeatureCode.
+    return appliance.get("deviceFeatureCode") or appliance.get("featureCode")
+
+
+async def main(api: ConnectLifeApi, format: str):
     appliances = await api.get_appliances_json()
     # Redact private fields
     for appliance in appliances:
         appliance["deviceId"] = "<redacted>"
         appliance["puid"] = "<redacted>"
         appliance["wifiId"] = "<redacted>"
-        if format == "json":
-            with open(f'{appliance["deviceTypeCode"]}-{appliance["deviceFeatureCode"]}.json', 'w') as f:
-                json.dump(order_dict(appliance), f, indent=2)
-        if format == "dd":
-            status_list = appliance.get("statusList", {})
-            with open(f'{appliance["deviceTypeCode"]}-{appliance["deviceFeatureCode"]}.yaml', 'w') as f:
-                f.write(f'# {appliance["deviceNickName"]}\n')
-                f.write('properties:\n')
-                for k, v in sorted(status_list.items()):
-                    f.write(f'- property: {k}\n')
-                    f.write(f'  # Sample value: {v}\n')
+    if format == "json":
+        dump_json(appliances)
+    if format == "dd":
+        dump_data_dictionaries(appliances)
+
+
+def dump_json(appliances):
+    """Write one JSON file per device, preserving the raw payload."""
+    seen: dict[str, int] = {}
+    for appliance in appliances:
+        base = f'{appliance["deviceTypeCode"]}-{feature_code(appliance)}'
+        # Disambiguate multiple devices that share the same type and feature
+        # code so they don't overwrite each other (e.g. several identical ACs).
+        seen[base] = seen.get(base, 0) + 1
+        name = base if seen[base] == 1 else f'{base}_{seen[base]}'
+        filename = f'{name}.json'
+        with open(filename, 'w') as f:
+            json.dump(order_dict(appliance), f, indent=2)
+        print(f'Wrote {filename}')
+
+
+def dump_data_dictionaries(appliances):
+    """Write one data dictionary skeleton per type/feature code.
+
+    Devices that share a type/feature code are merged so the skeleton lists
+    every distinct value observed for each property across all of them.
+    """
+    groups: dict[str, dict] = {}
+    for appliance in appliances:
+        base = f'{appliance["deviceTypeCode"]}-{feature_code(appliance)}'
+        group = groups.setdefault(base, {"nicknames": [], "values": {}})
+        group["nicknames"].append(appliance["deviceNickName"])
+        for k, v in appliance.get("statusList", {}).items():
+            observed = group["values"].setdefault(k, [])
+            if v not in observed:
+                observed.append(v)
+    for base, group in groups.items():
+        filename = f'{base}.yaml'
+        with open(filename, 'w') as f:
+            f.write(f'# {", ".join(group["nicknames"])}\n')
+            f.write('properties:\n')
+            for k in sorted(group["values"]):
+                values = group["values"][k]
+                label = "Observed value" if len(values) == 1 else "Observed values"
+                f.write(f'- property: {k}\n')
+                f.write(f'  # {label}: {", ".join(values)}\n')
+        print(f'Wrote {filename}')
 
 
 if __name__ == "__main__":
@@ -51,6 +98,12 @@ if __name__ == "__main__":
         },
         default="json"
     )
+    parser.add_argument(
+        "-t",
+        "--trir",
+        action="store_true",
+        help="Use the TRIR (Russia/CIS) backend instead of the default",
+    )
     parser.add_argument("-v", "--verbose", action='store_true')
     args = parser.parse_args()
     username = args.username if args.username else input("Username: ")
@@ -64,4 +117,5 @@ if __name__ == "__main__":
         handler.setFormatter(formatter)
         logger.addHandler(handler)
 
-    asyncio.run(main(username, password, args.format))
+    api = build_api(username, password, args.trir)
+    asyncio.run(main(api, args.format))

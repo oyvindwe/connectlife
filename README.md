@@ -13,14 +13,14 @@ there is no guarantee that you don't experience other problems, for instance loc
 
 Licensed under [GPLv3](LICENSE).
 
-To test out the library:
+To test out the library (users in Russia/CIS may need to pass the `--trir` option):
 ```bash
 pip install connectlife
-python -m connectlife.dump --username <username> --password <password>
+python -m connectlife.dump --username <username> --password <password> [--trir]
 ```
 
-This will log in to the ConnectLife API using the provided username and password, and print the list of all fields
-for all appliances that is registered with the account.
+This will log in to the ConnectLife API using the provided username and password, and write a JSON
+file with all returned fields for each appliance that is registered with the account.
 
 The Home Assistant integration is currently in discovery phase. Please contribute your device dumps to help
 the development.
