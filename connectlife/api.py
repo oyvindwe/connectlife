@@ -80,7 +80,7 @@ class LifeConnectAuthError(LifeConnectError):
 
 
 AIR_DUCT_STAT_TYPES = ("day", "week", "month", "year")
-# energyConsumptionCurve does not support "day" (confirmed against the live gateway);
+# energyConsumptionCurve does not support "day";
 # derive a daily value from the week response's per-day electricCurve instead.
 ENERGY_CONSUMPTION_STAT_TYPES = ("week", "month", "year")
 

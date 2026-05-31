@@ -85,7 +85,7 @@ TRIR_PASSWORD_PUBLIC_KEY = cast(
 TRIR_DEFAULT_TOKEN_LIFETIME = 7200
 TRIR_TOKEN_RENEW_MARGIN = 90
 
-# Invalid/expired access token; confirmed against the live TRIR gateway.
+# Invalid/expired access token; confirmed against the TRIR gateway.
 TRIR_INVALID_ACCESS_TOKEN = 100026
 # randStr check failure; inherited from the EU gateway value.
 TRIR_RANDSTR_CHECK_FAILED = 101005
