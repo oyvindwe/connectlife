@@ -13,9 +13,13 @@ import aiohttp
 
 from connectlife import api as api_module
 from connectlife.api import (
+    AirDuctEnergy,
     ConnectLifeApi,
+    EnergyConsumption,
     GATEWAY_DEVICE_LIST_URL,
+    GATEWAY_ENERGY_CONSUMPTION_URL,
     GATEWAY_ENERGY_URL,
+    GATEWAY_INVALID_ACCESS_TOKEN,
     GATEWAY_RANDSTR_CHECK_FAILED,
     GATEWAY_UPDATE_URL,
     LifeConnectAuthError,
@@ -450,111 +454,78 @@ class TestGatewayErrors(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Non-JSON response", str(ctx.exception))
 
 
-class TestDailyEnergy(unittest.IsolatedAsyncioTestCase):
-    """Daily energy consumption fetching via the HijuConn gateway."""
+def _cached_api() -> ConnectLifeApi:
+    api = ConnectLifeApi("user@example.com", "secret")
+    api._access_token = "cached-access-token"
+    api._expires = dt.datetime.now() + dt.timedelta(minutes=5)
+    return api
 
-    async def test_get_daily_energy_kwh_returns_electric_total(self) -> None:
-        api = ConnectLifeApi("user@example.com", "secret")
-        api._access_token = "cached-access-token"
-        api._expires = dt.datetime.now() + dt.timedelta(minutes=5)
 
+class TestAirDuctEnergy(unittest.IsolatedAsyncioTestCase):
+    """air_duct_energy endpoint (AC) via get_air_duct_energy."""
+
+    async def test_returns_parsed_result(self) -> None:
+        api = _cached_api()
         requests: list[tuple[str, str, FakeResponse]] = [
             (
                 "POST",
                 GATEWAY_ENERGY_URL,
                 FakeResponse(200, {"response": {
                     "resultCode": 0,
-                    "resultData": {"electricTotal": 1.23},
+                    "resultData": {
+                        "electricTotal": 1.23,
+                        "costTotal": "0.50",
+                        "durationTotal": 30,
+                        "electricCurve": {"0": "0.00"},
+                    },
                 }}),
             ),
         ]
 
         with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
-            result = await api.get_daily_energy_kwh("puid-1", "015", "dishwasher-60.2")
+            result = await api.get_air_duct_energy("puid-1", "009", "100")
 
-        self.assertEqual(result, 1.23)
+        assert result is not None
+        self.assertIsInstance(result, AirDuctEnergy)
+        self.assertEqual(result.electric_total, 1.23)
+        self.assertEqual(result.cost_total, 0.50)  # parsed from "0.50"
+        self.assertEqual(result.duration_total, 30.0)
+        self.assertEqual(result.stat_type, "day")
+        self.assertEqual(result.date_start, result.date_end)  # day range
         self.assertFalse(requests)
 
-    async def test_get_daily_energy_kwh_returns_zero(self) -> None:
-        api = ConnectLifeApi("user@example.com", "secret")
-        api._access_token = "cached-access-token"
-        api._expires = dt.datetime.now() + dt.timedelta(minutes=5)
-
-        requests: list[tuple[str, str, FakeResponse]] = [
-            (
-                "POST",
-                GATEWAY_ENERGY_URL,
-                FakeResponse(200, {"response": {
-                    "resultCode": 0,
-                    "resultData": {"electricTotal": 0.0},
-                }}),
-            ),
-        ]
-
-        with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
-            result = await api.get_daily_energy_kwh("puid-1", "009", "100")
-
-        self.assertEqual(result, 0.0)
-
-    async def test_get_daily_energy_kwh_returns_none_on_timeout(self) -> None:
-        api = ConnectLifeApi("user@example.com", "secret")
-        api._access_token = "cached-access-token"
-        api._expires = dt.datetime.now() + dt.timedelta(minutes=5)
-
+    async def test_returns_none_on_timeout(self) -> None:
+        api = _cached_api()
         requests: list[tuple[str, str, FakeResponse | Exception]] = [
             ("POST", GATEWAY_ENERGY_URL, TimeoutError()),
         ]
-
         with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
-            result = await api.get_daily_energy_kwh("puid-1", "009", "100")
+            self.assertIsNone(await api.get_air_duct_energy("puid-1", "009", "100"))
 
-        self.assertIsNone(result)
-
-    async def test_get_daily_energy_kwh_returns_none_on_missing_result_data(self) -> None:
-        api = ConnectLifeApi("user@example.com", "secret")
-        api._access_token = "cached-access-token"
-        api._expires = dt.datetime.now() + dt.timedelta(minutes=5)
-
+    async def test_returns_none_on_missing_result_data(self) -> None:
+        api = _cached_api()
         requests: list[tuple[str, str, FakeResponse]] = [
-            (
-                "POST",
-                GATEWAY_ENERGY_URL,
-                FakeResponse(200, {"response": {"resultCode": 0}}),
-            ),
+            ("POST", GATEWAY_ENERGY_URL, FakeResponse(200, {"response": {"resultCode": 0}})),
         ]
-
         with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
-            result = await api.get_daily_energy_kwh("puid-1", "009", "100")
+            self.assertIsNone(await api.get_air_duct_energy("puid-1", "009", "100"))
 
-        self.assertIsNone(result)
-
-    async def test_get_daily_energy_kwh_returns_none_on_gateway_error(self) -> None:
-        api = ConnectLifeApi("user@example.com", "secret")
-        api._access_token = "cached-access-token"
-        api._expires = dt.datetime.now() + dt.timedelta(minutes=5)
-
+    async def test_returns_none_on_gateway_error(self) -> None:
+        api = _cached_api()
         requests: list[tuple[str, str, FakeResponse]] = [
             (
                 "POST",
                 GATEWAY_ENERGY_URL,
                 FakeResponse(200, {"response": {
-                    "resultCode": 1,
-                    "errorCode": 999,
-                    "errorDesc": "energy not available",
+                    "resultCode": 1, "errorCode": 999, "errorDesc": "energy not available",
                 }}),
             ),
         ]
-
         with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
-            result = await api.get_daily_energy_kwh("puid-1", "009", "100")
+            self.assertIsNone(await api.get_air_duct_energy("puid-1", "009", "100"))
 
-        self.assertIsNone(result)
-
-    async def test_get_daily_energy_kwh_retries_on_randstr_failure(self) -> None:
-        api = ConnectLifeApi("user@example.com", "secret")
-        api._access_token = "cached-access-token"
-        api._expires = dt.datetime.now() + dt.timedelta(minutes=5)
-
+    async def test_retries_on_randstr_failure(self) -> None:
+        api = _cached_api()
         requests: list[tuple[str, str, FakeResponse]] = [
             (
                 "POST",
@@ -568,18 +539,111 @@ class TestDailyEnergy(unittest.IsolatedAsyncioTestCase):
             (
                 "POST",
                 GATEWAY_ENERGY_URL,
+                FakeResponse(200, {"response": {"resultCode": 0, "resultData": {"electricTotal": 1.5}}}),
+            ),
+        ]
+        with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
+            result = await api.get_air_duct_energy("puid-1", "009", "100")
+        assert result is not None
+        self.assertEqual(result.electric_total, 1.5)
+        self.assertFalse(requests)  # failure + retry both consumed
+
+    async def test_rejects_invalid_stat_type(self) -> None:
+        api = _cached_api()
+        with self.assertRaises(ValueError):
+            await api.get_air_duct_energy("puid-1", "009", "100", stat_type="decade")
+
+    async def test_auth_failure_raises_without_relogin(self) -> None:
+        # A rejected token must NOT trigger a full re-login per call (storm guard);
+        # it raises LifeConnectAuthError after a single request.
+        api = _cached_api()
+        requests: list[tuple[str, str, FakeResponse]] = [
+            (
+                "POST",
+                GATEWAY_ENERGY_URL,
+                FakeResponse(200, {"response": {
+                    "resultCode": 1,
+                    "errorCode": GATEWAY_INVALID_ACCESS_TOKEN,
+                    "errorDesc": "invalid access token",
+                }}),
+            ),
+        ]
+        with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
+            with self.assertRaises(LifeConnectAuthError):
+                await api.get_air_duct_energy("puid-1", "009", "100")
+        self.assertFalse(requests)  # single request, no re-login retry
+
+
+class TestEnergyConsumption(unittest.IsolatedAsyncioTestCase):
+    """energyConsumptionCurve endpoint (appliances) via get_energy_consumption_curve."""
+
+    async def test_parses_all_fields(self) -> None:
+        api = _cached_api()
+        requests: list[tuple[str, str, FakeResponse]] = [
+            (
+                "POST",
+                GATEWAY_ENERGY_CONSUMPTION_URL,
                 FakeResponse(200, {"response": {
                     "resultCode": 0,
-                    "resultData": {"electricTotal": 1.5},
+                    "type": "week",
+                    "resultData": {
+                        "electricUsage": "4.00",
+                        "waterUsage": "55.00",
+                        "normElectricUsage": "4.00",
+                        "normWaterUsage": "55.00",
+                        "runTimes": "11.00",
+                        "cycles": 5,
+                        "electricCurve": {"2026-05-25": "1.0"},
+                        "waterCurve": {"2026-05-25": "11.0"},
+                        "energyPeriod": [{"dateStart": "2026-05-25", "eleUsage": "4.00"}],
+                    },
                 }}),
             ),
         ]
 
         with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
-            result = await api.get_daily_energy_kwh("puid-1", "009", "100")
+            result = await api.get_energy_consumption_curve("puid-1", "015", "dishwasher-60.2")
 
-        self.assertEqual(result, 1.5)
-        self.assertFalse(requests)  # both the failure and the retry were consumed
+        assert result is not None
+        self.assertIsInstance(result, EnergyConsumption)
+        self.assertEqual(result.electric_total, 4.0)  # from electricUsage
+        self.assertEqual(result.water_total, 55.0)
+        self.assertEqual(result.run_time, 11.0)
+        self.assertEqual(result.cycles, 5)
+        self.assertEqual(result.stat_type, "week")
+        self.assertEqual(len(result.electric_curve or {}), 1)
+        self.assertEqual(len(result.energy_period or []), 1)
+        self.assertFalse(requests)
+
+    async def test_rejects_day_stat_type(self) -> None:
+        # day is not supported by this endpoint; must raise before any request
+        api = _cached_api()
+        with self.assertRaises(ValueError):
+            await api.get_energy_consumption_curve("puid-1", "015", "dishwasher-60.2", stat_type="day")
+
+    async def test_retries_on_randstr_failure(self) -> None:
+        api = _cached_api()
+        requests: list[tuple[str, str, FakeResponse]] = [
+            (
+                "POST",
+                GATEWAY_ENERGY_CONSUMPTION_URL,
+                FakeResponse(200, {"response": {
+                    "resultCode": 1,
+                    "errorCode": GATEWAY_RANDSTR_CHECK_FAILED,
+                    "errorDesc": "randStr check fail.",
+                }}),
+            ),
+            (
+                "POST",
+                GATEWAY_ENERGY_CONSUMPTION_URL,
+                FakeResponse(200, {"response": {"resultCode": 0, "resultData": {"electricUsage": "2.0"}}}),
+            ),
+        ]
+        with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
+            result = await api.get_energy_consumption_curve("puid-1", "015", "dishwasher-60.2")
+        assert result is not None
+        self.assertEqual(result.electric_total, 2.0)
+        self.assertFalse(requests)
 
 
 class TestRandStrRetry(unittest.IsolatedAsyncioTestCase):

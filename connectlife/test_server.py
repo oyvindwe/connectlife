@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import datetime as dt
 import hashlib
 from random import randrange
 
@@ -115,7 +116,58 @@ async def air_duct_energy(request):
     puid = req.get("puid")
     if puid not in appliances:
         return _gateway_error(404, f"Unknown puid {puid}")
-    return _gateway_ok({"resultData": {"electricTotal": 0.0, "durationTotal": 0}})
+    hours = [str(h) for h in range(24)]
+    return _gateway_ok({
+        "type": req.get("statType", "day"),
+        "dateStart": req.get("dateStart"),
+        "dateEnd": req.get("dateEnd"),
+        "resultData": {
+            "electricTotal": 0.0,
+            "costTotal": "0.00",
+            "durationTotal": 0,
+            "electricCurve": {h: "0.00" for h in hours},
+            "costCurve": {h: "0.00" for h in hours},
+            "coolingCurve": {h: "0" for h in hours},
+            "heatingCurve": {h: "0" for h in hours},
+        },
+    })
+
+async def energy_consumption_curve(request):
+    req = await request.json()
+    puid = req.get("puid")
+    if puid not in appliances:
+        return _gateway_error(404, f"Unknown puid {puid}")
+    # Per-day curve across [dateStart, dateEnd] (incl. today) so clients reading
+    # curve[today] get a value — the real gateway returns a per-day curve. Sample
+    # non-zero values so the daily sensors visibly populate. Year statType uses
+    # YYYY-MM and is left empty.
+    electric_curve: dict[str, str] = {}
+    water_curve: dict[str, str] = {}
+    try:
+        day = dt.date.fromisoformat(req["dateStart"])
+        end = dt.date.fromisoformat(req["dateEnd"])
+        while day <= end:
+            electric_curve[day.isoformat()] = "1.0"
+            water_curve[day.isoformat()] = "11.0"
+            day += dt.timedelta(days=1)
+    except (KeyError, ValueError):
+        pass
+    return _gateway_ok({
+        "type": req.get("statType", "week"),
+        "deviceType": req.get("deviceType"),
+        "resultData": {
+            "electricUsage": f"{len(electric_curve):.2f}",
+            "waterUsage": f"{len(water_curve) * 11:.2f}",
+            "normElectricUsage": "0.00",
+            "normWaterUsage": "0.00",
+            "runTimes": "0.00",
+            "cycles": len(electric_curve),
+            "electricCurve": electric_curve,
+            "waterCurve": water_curve,
+            "programResult": [],
+            "energyPeriod": [],
+        },
+    })
 
 # -- TRIR (Russia/CIS) backend ---------------------------------------------
 
@@ -254,6 +306,7 @@ def main(args):
     app.add_routes([web.get('/clife-svc/pu/get_device_status_list', get_device_status_list)])
     app.add_routes([web.post('/device/pu/property/set', property_set)])
     app.add_routes([web.post('/clife-svc/pu/air_duct_energy', air_duct_energy)])
+    app.add_routes([web.post('/clife-svc/pu/energyConsumptionCurve', energy_consumption_curve)])
     # TRIR (Russia/CIS) backend. property/set and air_duct_energy are shared.
     app.add_routes([web.post('/account/acc/login_pwd', trir_login)])
     app.add_routes([web.post('/account/acc/refresh_token', trir_refresh_token)])

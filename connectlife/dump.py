@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import dataclasses
 from getpass import getpass
 import logging
 import json
@@ -26,6 +27,9 @@ def feature_code(appliance: dict) -> str | None:
 
 
 async def main(api: ConnectLifeApi, format: str):
+    if format == "energy":
+        await dump_energy(api)
+        return
     appliances = await api.get_appliances_json()
     # Redact private fields
     for appliance in appliances:
@@ -36,6 +40,36 @@ async def main(api: ConnectLifeApi, format: str):
         dump_json(appliances)
     if format == "dd":
         dump_data_dictionaries(appliances)
+
+
+async def dump_energy(api: ConnectLifeApi):
+    """Write one JSON file per device with both energy endpoints' responses.
+
+    Probes both ``air_duct_energy`` (air conditioners) and ``energyConsumptionCurve``
+    (other appliances) so it's clear which one a device actually reports data on. Uses
+    each endpoint's finest period (day / week). The responses carry no private fields.
+    """
+    seen: dict[str, int] = {}
+    for appliance in await api.get_appliances():
+        base = f"{appliance.device_type_code}-{appliance.device_feature_code}"
+        seen[base] = seen.get(base, 0) + 1
+        name = base if seen[base] == 1 else f"{base}_{seen[base]}"
+        air = await api.get_air_duct_energy(
+            appliance.puid, appliance.device_type_code, appliance.device_feature_code
+        )
+        consumption = await api.get_energy_consumption_curve(
+            appliance.puid, appliance.device_type_code, appliance.device_feature_code
+        )
+        result = {
+            "deviceTypeCode": appliance.device_type_code,
+            "deviceFeatureCode": appliance.device_feature_code,
+            "air_duct_energy": dataclasses.asdict(air) if air else None,
+            "energy_consumption_curve": dataclasses.asdict(consumption) if consumption else None,
+        }
+        filename = f"{name}-energy.json"
+        with open(filename, "w") as f:
+            json.dump(result, f, indent=2)
+        print(f"Wrote {filename}")
 
 
 def dump_json(appliances):
@@ -94,7 +128,8 @@ if __name__ == "__main__":
         "--format",
         choices={
             "json": "Dump to JSON file",
-            "dd": "Create data dictionary skeleton"
+            "dd": "Create data dictionary skeleton",
+            "energy": "Dump both energy endpoints' responses per device",
         },
         default="json"
     )
