@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import calendar
 import datetime as dt
 import hashlib
 import json
 import logging
+from dataclasses import dataclass
 from typing import Any, Sequence, cast
 
 import aiohttp
@@ -34,6 +36,7 @@ GATEWAY_BASE_URL = "https://clife-eu-gateway.hijuconn.com"
 GATEWAY_DEVICE_LIST_URL = f"{GATEWAY_BASE_URL}/clife-svc/pu/get_device_status_list"
 GATEWAY_UPDATE_URL = f"{GATEWAY_BASE_URL}/device/pu/property/set"
 GATEWAY_ENERGY_URL = f"{GATEWAY_BASE_URL}/clife-svc/pu/air_duct_energy"
+GATEWAY_ENERGY_CONSUMPTION_URL = f"{GATEWAY_BASE_URL}/clife-svc/pu/energyConsumptionCurve"
 GATEWAY_APP_ID = "47110565134383"
 GATEWAY_APP_SECRET = "yOzhz6junYno-nmULM3Wr7PU_dpSZN22ZdluvVWZ4uW5ZwwG8fIGCHTbrhcnU-iv"
 GATEWAY_LANGUAGE_ID = "12"
@@ -76,6 +79,115 @@ class LifeConnectAuthError(LifeConnectError):
     """Authentication failure against ConnectLife."""
 
 
+AIR_DUCT_STAT_TYPES = ("day", "week", "month", "year")
+# energyConsumptionCurve does not support "day";
+# derive a daily value from the week response's per-day electricCurve instead.
+ENERGY_CONSUMPTION_STAT_TYPES = ("week", "month", "year")
+
+
+def _as_float(value: Any) -> float | None:
+    """Coerce a gateway numeric (often a string, e.g. "4.00"/"327") to float."""
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_int(value: Any) -> int | None:
+    """Coerce a gateway integer (sometimes a string, e.g. "5") to int."""
+    number = _as_float(value)
+    return None if number is None else int(number)
+
+
+@dataclass(frozen=True)
+class EnergyResult:
+    """Fields common to both energy endpoints.
+
+    ``electric_total`` is kWh for the period; ``electric_curve`` maps bucket -> value.
+    Bucket granularity depends on the endpoint and stat_type: air_duct_energy's ``day``
+    curve is per-hour (keys ``"0"``..``"23"``), while week/month curves are per-day and
+    year is per-month. ``raw`` keeps the full resultData.
+    """
+
+    stat_type: str
+    date_start: str | None
+    date_end: str | None
+    electric_total: float | None
+    electric_curve: dict[str, Any] | None
+    raw: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class AirDuctEnergy(EnergyResult):
+    """`air_duct_energy` result (air conditioners). Electricity/cost/runtime.
+
+    Note: this endpoint returns zeros for non-AC device types.
+    """
+
+    cost_total: float | None
+    duration_total: float | None  # minutes
+    cost_curve: dict[str, Any] | None
+    cooling_curve: dict[str, Any] | None
+    heating_curve: dict[str, Any] | None
+
+    @classmethod
+    def _from_result_data(
+        cls, stat_type: str, date_start: str, date_end: str, data: dict[str, Any]
+    ) -> "AirDuctEnergy":
+        return cls(
+            stat_type=stat_type,
+            date_start=date_start,
+            date_end=date_end,
+            electric_total=_as_float(data.get("electricTotal")),
+            electric_curve=data.get("electricCurve"),
+            cost_total=_as_float(data.get("costTotal")),
+            duration_total=_as_float(data.get("durationTotal")),
+            cost_curve=data.get("costCurve"),
+            cooling_curve=data.get("coolingCurve"),
+            heating_curve=data.get("heatingCurve"),
+            raw=data,
+        )
+
+
+@dataclass(frozen=True)
+class EnergyConsumption(EnergyResult):
+    """`energyConsumptionCurve` result (dishwashers, washing machines, ...).
+
+    Electricity + water + cycles + runtime, with per-day curves and a rolling history of
+    prior periods in ``energy_period``.
+    """
+
+    water_total: float | None  # litres
+    run_time: float | None  # hours
+    cycles: int | None
+    norm_electric_total: float | None
+    norm_water_total: float | None
+    water_curve: dict[str, Any] | None
+    energy_period: list[dict[str, Any]] | None
+
+    @classmethod
+    def _from_result_data(
+        cls, stat_type: str, date_start: str, date_end: str, data: dict[str, Any]
+    ) -> "EnergyConsumption":
+        return cls(
+            stat_type=stat_type,
+            date_start=date_start,
+            date_end=date_end,
+            electric_total=_as_float(data.get("electricUsage")),
+            electric_curve=data.get("electricCurve"),
+            water_total=_as_float(data.get("waterUsage")),
+            run_time=_as_float(data.get("runTimes")),
+            cycles=_as_int(data.get("cycles")),
+            norm_electric_total=_as_float(data.get("normElectricUsage")),
+            norm_water_total=_as_float(data.get("normWaterUsage")),
+            water_curve=data.get("waterCurve"),
+            energy_period=data.get("energyPeriod"),
+            raw=data,
+        )
+
+
 class ConnectLifeApi:
     """ConnectLife API client."""
 
@@ -96,6 +208,7 @@ class ConnectLifeApi:
     gateway_device_list_url = GATEWAY_DEVICE_LIST_URL
     gateway_update_url = GATEWAY_UPDATE_URL
     gateway_energy_url = GATEWAY_ENERGY_URL
+    gateway_energy_consumption_url = GATEWAY_ENERGY_CONSUMPTION_URL
 
     # Overridable so alternative backends (e.g. TRIR) can vary the client
     # identity and the gateway error codes they react to.
@@ -119,6 +232,7 @@ class ConnectLifeApi:
             self.gateway_device_list_url = f"{test_server}/clife-svc/pu/get_device_status_list"
             self.gateway_update_url = f"{test_server}/device/pu/property/set"
             self.gateway_energy_url = f"{test_server}/clife-svc/pu/air_duct_energy"
+            self.gateway_energy_consumption_url = f"{test_server}/clife-svc/pu/energyConsumptionCurve"
 
         self._username = username
         self._password = password
@@ -163,39 +277,139 @@ class ConnectLifeApi:
             data, retry_on_reauth=True, retry_on_randstr=True,
         )
 
-    async def get_daily_energy_kwh(
+    async def get_air_duct_energy(
         self,
         puid: str,
         device_type_code: str,
         device_feature_code: str,
-    ) -> float | None:
-        """Fetch today's energy consumption in kWh for a device.
+        *,
+        stat_type: str = "day",
+        date: dt.date | None = None,
+    ) -> AirDuctEnergy | None:
+        """Fetch energy statistics from the ``air_duct_energy`` endpoint.
 
-        Returns None if the energy endpoint fails for this device.
+        For air conditioners; returns zeros for other device types. ``stat_type`` is one of
+        day/week/month/year for the period containing ``date`` (today if omitted). Returns
+        None if the endpoint fails for this device.
+        """
+        if stat_type not in AIR_DUCT_STAT_TYPES:
+            raise ValueError(f"stat_type must be one of {AIR_DUCT_STAT_TYPES}, got {stat_type!r}")
+        date_start, date_end = self._energy_date_range(stat_type, date or dt.date.today(), year_month=False)
+        data = await self._fetch_energy(
+            self.gateway_energy_url,
+            puid=puid,
+            device_type_code=device_type_code,
+            device_feature_code=device_feature_code,
+            stat_type=stat_type,
+            date_start=date_start,
+            date_end=date_end,
+            extra={"curve": "1"},
+        )
+        if data is None:
+            return None
+        return AirDuctEnergy._from_result_data(stat_type, date_start, date_end, data)
+
+    async def get_energy_consumption_curve(
+        self,
+        puid: str,
+        device_type_code: str,
+        device_feature_code: str,
+        *,
+        stat_type: str = "week",
+        date: dt.date | None = None,
+    ) -> EnergyConsumption | None:
+        """Fetch energy/water statistics from the ``energyConsumptionCurve`` endpoint.
+
+        For appliances such as dishwashers and washing machines. ``stat_type`` is one of
+        week/month/year (no day — derive a daily value from the week ``electric_curve``).
+        Returns None if the endpoint fails for this device.
+        """
+        if stat_type not in ENERGY_CONSUMPTION_STAT_TYPES:
+            raise ValueError(
+                f"stat_type must be one of {ENERGY_CONSUMPTION_STAT_TYPES}, got {stat_type!r}"
+            )
+        date = date or dt.date.today()
+        date_start, date_end = self._energy_date_range(stat_type, date, year_month=True)
+        # datePeriodEnd anchors the rolling energyPeriod history to the requested period.
+        data = await self._fetch_energy(
+            self.gateway_energy_consumption_url,
+            puid=puid,
+            device_type_code=device_type_code,
+            device_feature_code=device_feature_code,
+            stat_type=stat_type,
+            date_start=date_start,
+            date_end=date_end,
+            extra={"datePeriodEnd": date.isoformat()},
+        )
+        if data is None:
+            return None
+        return EnergyConsumption._from_result_data(stat_type, date_start, date_end, data)
+
+    async def _fetch_energy(
+        self,
+        url: str,
+        *,
+        puid: str,
+        device_type_code: str,
+        device_feature_code: str,
+        stat_type: str,
+        date_start: str,
+        date_end: str,
+        extra: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Shared fetch for the energy endpoints. Returns ``resultData`` or None.
+
+        Energy is best-effort and called per appliance, so it does NOT re-login on a
+        rejected token (``retry_on_reauth=False``) — that would turn one auth hiccup into
+        a full-login-per-appliance storm. Normal token refresh is still handled by
+        ``_fetch_access_token``. A genuine auth failure raises ``LifeConnectAuthError`` so
+        the caller can stop rather than hammer the gateway for every device.
         """
         await self._fetch_access_token()
-        today = dt.date.today().isoformat()
         try:
             response = await self._request_gateway_json(
-                self.gateway_energy_url,
+                url,
                 payload={
                     "puid": puid,
-                    "statType": "day",
-                    "dateStart": today,
-                    "dateEnd": today,
-                    "curve": "1",
                     "deviceType": device_type_code,
                     "featureCode": device_feature_code,
+                    "statType": stat_type,
+                    "dateStart": date_start,
+                    "dateEnd": date_end,
+                    **extra,
                 },
-                retry_on_reauth=True,
+                retry_on_reauth=False,
                 retry_on_randstr=True,
             )
             result_data = response.get("resultData")
             if isinstance(result_data, dict):
-                return result_data.get("electricTotal")
+                return result_data
+        except LifeConnectAuthError:
+            raise
         except (LifeConnectError, aiohttp.ClientError, TimeoutError) as err:
             _LOGGER.debug("Energy fetch failed for %s: %s", puid, err)
         return None
+
+    @staticmethod
+    def _energy_date_range(stat_type: str, date: dt.date, year_month: bool) -> tuple[str, str]:
+        """(dateStart, dateEnd) for the period of ``stat_type`` around ``date``.
+
+        ``year_month`` selects the ``YYYY-MM`` format the energyConsumptionCurve endpoint
+        wants for ``year`` (air_duct uses ``YYYY-MM-DD`` throughout).
+        """
+        if stat_type == "week":
+            start = date - dt.timedelta(days=date.weekday())
+            return start.isoformat(), (start + dt.timedelta(days=6)).isoformat()
+        if stat_type == "month":
+            start = date.replace(day=1)
+            end = date.replace(day=calendar.monthrange(date.year, date.month)[1])
+            return start.isoformat(), end.isoformat()
+        if stat_type == "year":
+            if year_month:
+                return date.strftime("%Y-01"), date.strftime("%Y-12")
+            return date.replace(month=1, day=1).isoformat(), date.replace(month=12, day=31).isoformat()
+        # day
+        return date.isoformat(), date.isoformat()
 
     def _normalize_appliance_payloads(self, payloads: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Preserve cached statusList when upstream omits it."""

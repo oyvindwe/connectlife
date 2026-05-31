@@ -22,6 +22,12 @@ python -m connectlife.dump --username <username> --password <password> [--trir]
 This will log in to the ConnectLife API using the provided username and password, and write a JSON
 file with all returned fields for each appliance that is registered with the account.
 
+To instead dump each appliance's energy statistics (both the `air_duct_energy` and
+`energyConsumptionCurve` endpoints), add `--format energy`:
+```bash
+python -m connectlife.dump --username <username> --password <password> --format energy
+```
+
 The Home Assistant integration is currently in discovery phase. Please contribute your device dumps to help
 the development.
 

@@ -85,7 +85,7 @@ TRIR_PASSWORD_PUBLIC_KEY = cast(
 TRIR_DEFAULT_TOKEN_LIFETIME = 7200
 TRIR_TOKEN_RENEW_MARGIN = 90
 
-# Invalid/expired access token; confirmed against the live TRIR gateway.
+# Invalid/expired access token; confirmed against the TRIR gateway.
 TRIR_INVALID_ACCESS_TOKEN = 100026
 # randStr check failure; inherited from the EU gateway value.
 TRIR_RANDSTR_CHECK_FAILED = 101005
@@ -141,6 +141,7 @@ class TrirConnectLifeApi(ConnectLifeApi):
         self.gateway_device_list_url = f"{base}/br/getDeviceTabList"
         self.gateway_update_url = f"{base}/device/pu/property/set"
         self.gateway_energy_url = f"{base}/clife-svc/pu/air_duct_energy"
+        self.gateway_energy_consumption_url = f"{base}/clife-svc/pu/energyConsumptionCurve"
 
     # -- Auth: initial login -------------------------------------------------
 
