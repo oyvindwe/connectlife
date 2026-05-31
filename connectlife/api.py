@@ -188,6 +188,7 @@ class ConnectLifeApi:
                     "featureCode": device_feature_code,
                 },
                 retry_on_reauth=True,
+                retry_on_randstr=True,
             )
             result_data = response.get("resultData")
             if isinstance(result_data, dict):
