@@ -550,6 +550,37 @@ class TestDailyEnergy(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(result)
 
+    async def test_get_daily_energy_kwh_retries_on_randstr_failure(self) -> None:
+        api = ConnectLifeApi("user@example.com", "secret")
+        api._access_token = "cached-access-token"
+        api._expires = dt.datetime.now() + dt.timedelta(minutes=5)
+
+        requests: list[tuple[str, str, FakeResponse]] = [
+            (
+                "POST",
+                GATEWAY_ENERGY_URL,
+                FakeResponse(200, {"response": {
+                    "resultCode": 1,
+                    "errorCode": GATEWAY_RANDSTR_CHECK_FAILED,
+                    "errorDesc": "randStr check fail.",
+                }}),
+            ),
+            (
+                "POST",
+                GATEWAY_ENERGY_URL,
+                FakeResponse(200, {"response": {
+                    "resultCode": 0,
+                    "resultData": {"electricTotal": 1.5},
+                }}),
+            ),
+        ]
+
+        with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
+            result = await api.get_daily_energy_kwh("puid-1", "009", "100")
+
+        self.assertEqual(result, 1.5)
+        self.assertFalse(requests)  # both the failure and the retry were consumed
+
 
 class TestRandStrRetry(unittest.IsolatedAsyncioTestCase):
     """randStr check failures should be retried with a fresh signature."""
