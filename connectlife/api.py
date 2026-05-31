@@ -105,8 +105,10 @@ def _as_int(value: Any) -> int | None:
 class EnergyResult:
     """Fields common to both energy endpoints.
 
-    ``electric_total`` is kWh for the period; ``electric_curve`` maps bucket -> value
-    (per-day for week/month, per-month for year). ``raw`` keeps the full resultData.
+    ``electric_total`` is kWh for the period; ``electric_curve`` maps bucket -> value.
+    Bucket granularity depends on the endpoint and stat_type: air_duct_energy's ``day``
+    curve is per-hour (keys ``"0"``..``"23"``), while week/month curves are per-day and
+    year is per-month. ``raw`` keeps the full resultData.
     """
 
     stat_type: str
