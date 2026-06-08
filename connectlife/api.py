@@ -9,6 +9,7 @@ import datetime as dt
 import hashlib
 import json
 import logging
+import secrets
 from dataclasses import dataclass
 from typing import Any, Sequence, cast
 
@@ -745,7 +746,7 @@ class ConnectLifeApi:
             )
 
         if retry_on_randstr and error_code == self.randstr_check_failed_code:
-            _LOGGER.warning("HijuConn gateway randStr check failed, retrying with fresh signature")
+            _LOGGER.debug("HijuConn gateway randStr check failed, retrying with fresh signature")
             return await self._request_gateway_json(
                 url,
                 payload=payload,
@@ -792,8 +793,9 @@ class ConnectLifeApi:
             "appId": GATEWAY_APP_ID,
             "appSecret": GATEWAY_APP_SECRET,
             "languageId": GATEWAY_LANGUAGE_ID,
-            # MD5 of timestamp matches the vendor's mobile app protocol.
-            "randStr": hashlib.md5(timestamp.encode()).hexdigest(),
+            # A per-request nonce. Must be unique: the gateway rejects duplicates
+            # ("randStr check fail."). 32 hex chars.
+            "randStr": secrets.token_hex(16),
             "timeStamp": timestamp,
             "timezone": GATEWAY_TIMEZONE,
             "version": GATEWAY_VERSION,
