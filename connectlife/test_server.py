@@ -169,6 +169,26 @@ async def energy_consumption_curve(request):
         },
     })
 
+async def query_static_data(request):
+    req = await request.json()
+    puid = req.get("puid")
+    if puid not in appliances:
+        return _gateway_error(404, f"Unknown puid {puid}")
+    # Stub mirrors the real response shape: it echoes the puid (so the dump tool
+    # has something to redact) and nests capability data under "data". The feature
+    # code is echoed there so per-puid responses differ between devices.
+    appliance = appliances[puid]
+    return _gateway_ok({
+        "puid": puid,
+        "dev_type": appliance.get("deviceTypeCode"),
+        "wifi_id": None,
+        "device_id": None,
+        "data": {"deviceFeatureCode": appliance.get("deviceFeatureCode")},
+    })
+
+async def get_property_list(request):  # noqa: ARG001
+    return _gateway_ok({"properties": []})
+
 # -- TRIR (Russia/CIS) backend ---------------------------------------------
 
 # Canned tokens returned by the TRIR login/refresh endpoints. The *ExpiredTime
@@ -307,6 +327,8 @@ def main(args):
     app.add_routes([web.post('/device/pu/property/set', property_set)])
     app.add_routes([web.post('/clife-svc/pu/air_duct_energy', air_duct_energy)])
     app.add_routes([web.post('/clife-svc/pu/energyConsumptionCurve', energy_consumption_curve)])
+    app.add_routes([web.post('/clife-svc/pu/query_static_data', query_static_data)])
+    app.add_routes([web.get('/clife-svc/get_property_list', get_property_list)])
     # TRIR (Russia/CIS) backend. property/set and air_duct_energy are shared.
     app.add_routes([web.post('/account/acc/login_pwd', trir_login)])
     app.add_routes([web.post('/account/acc/refresh_token', trir_refresh_token)])

@@ -6,7 +6,7 @@ import logging
 import json
 import sys
 
-from .api import ConnectLifeApi
+from .api import ConnectLifeApi, LifeConnectError
 from .trir import TrirConnectLifeApi
 
 
@@ -26,9 +26,26 @@ def feature_code(appliance: dict) -> str | None:
     return appliance.get("deviceFeatureCode") or appliance.get("featureCode")
 
 
-async def main(api: ConnectLifeApi, format: str):
-    if format == "energy":
+async def main(
+    api: ConnectLifeApi,
+    query: str,
+    format: str,
+    device_type_code: str | None = None,
+    device_feature_code: str | None = None,
+):
+    """Dump the ``query`` data. ``format`` (json/dd) applies only to ``appliances``."""
+    if query == "energy":
         await dump_energy(api)
+        return
+    if query == "static":
+        await dump_static(api)
+        return
+    if query == "property-list":
+        if not device_type_code or not device_feature_code:
+            raise SystemExit(
+                "--query property-list requires --device-type-code and --device-feature-code"
+            )
+        await dump_property_list(api, device_type_code, device_feature_code)
         return
     appliances = await api.get_appliances_json()
     # Redact private fields
@@ -70,6 +87,82 @@ async def dump_energy(api: ConnectLifeApi):
         with open(filename, "w") as f:
             json.dump(result, f, indent=2)
         print(f"Wrote {filename}")
+
+
+async def dump_static(api: ConnectLifeApi):
+    """Write one JSON file per device with its ``query_static_data`` response.
+
+    Keyed by puid, so it can differ between two devices that share a type/feature
+    code — useful for working out whether the gateway exposes anything that
+    distinguishes otherwise-identical feature codes. For the per-feature-code
+    property list, use ``dump_property_list`` (``--format property-list``).
+
+    The response schema is undocumented and may echo identifiers — review and
+    redact each file before sharing.
+    """
+    seen: dict[str, int] = {}
+    for appliance in await api.get_appliances():
+        base = f"{appliance.device_type_code}-{appliance.device_feature_code}"
+        seen[base] = seen.get(base, 0) + 1
+        name = base if seen[base] == 1 else f"{base}_{seen[base]}"
+        # query_static_data echoes the puid (and carries wifi_id/device_id keys),
+        # so scrub the identifiers we know before writing a shareable file.
+        secrets = {s for s in (appliance.puid, appliance.device_id, appliance.wifi_id) if s}
+        result = {
+            "deviceTypeCode": appliance.device_type_code,
+            "deviceFeatureCode": appliance.device_feature_code,
+            "query_static_data": _redact(
+                await _probe(api.query_static_data, appliance.puid), secrets
+            ),
+        }
+        filename = f"{name}-static.json"
+        with open(filename, "w") as f:
+            json.dump(result, f, indent=2)
+        print(f"Wrote {filename} (known identifiers redacted; review before sharing)")
+
+
+async def dump_property_list(
+    api: ConnectLifeApi, device_type_code: str, device_feature_code: str
+):
+    """Fetch and write the property list for a single type/feature code.
+
+    Unlike the other formats this targets an arbitrary code rather than the
+    account's appliances, so it can probe feature codes the account doesn't own.
+    """
+    result = await _probe(api.get_property_list, device_type_code, device_feature_code)
+    filename = f"{device_type_code}-{device_feature_code}-property-list.json"
+    with open(filename, "w") as f:
+        json.dump(result, f, indent=2)
+    print(f"Wrote {filename}")
+
+
+def _redact(value, secrets):
+    """Recursively replace any string equal to a known identifier with a marker.
+
+    ``query_static_data`` echoes the device's puid (and may carry wifi_id /
+    device_id). We can only scrub the identifiers we passed in — the schema is
+    gateway-defined and may contain others — hence the review-before-sharing
+    reminder still stands.
+    """
+    if isinstance(value, dict):
+        return {k: _redact(v, secrets) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_redact(v, secrets) for v in value]
+    if isinstance(value, str) and value in secrets:
+        return "<redacted>"
+    return value
+
+
+async def _probe(func, *args):
+    """Call a probe endpoint, capturing a gateway error instead of aborting.
+
+    A device that doesn't support an endpoint returns a gateway error; recording
+    it is as informative as a success, so the dump shows it rather than failing.
+    """
+    try:
+        return await func(*args)
+    except LifeConnectError as err:
+        return {"error": str(err)}
 
 
 def dump_json(appliances):
@@ -124,14 +217,34 @@ if __name__ == "__main__":
     parser.add_argument("-u", "--username")
     parser.add_argument("-p", "--password")
     parser.add_argument(
+        "-q",
+        "--query",
+        choices={
+            "appliances": "The account's appliances (default; honors --format)",
+            "energy": "Both energy endpoints' responses per device",
+            "static": "The per-device query_static_data response per device",
+            "property-list": "The property list for --device-type-code/--device-feature-code",
+        },
+        default="appliances",
+        help="What to dump (default: appliances)",
+    )
+    parser.add_argument(
         "-f",
         "--format",
         choices={
             "json": "Dump to JSON file",
             "dd": "Create data dictionary skeleton",
-            "energy": "Dump both energy endpoints' responses per device",
         },
-        default="json"
+        default="json",
+        help="Output format for --query appliances (ignored for other queries)",
+    )
+    parser.add_argument(
+        "--device-type-code",
+        help="Device type code (required for --query property-list)",
+    )
+    parser.add_argument(
+        "--device-feature-code",
+        help="Device feature code (required for --query property-list)",
     )
     parser.add_argument(
         "-t",
@@ -153,4 +266,6 @@ if __name__ == "__main__":
         logger.addHandler(handler)
 
     api = build_api(username, password, args.trir)
-    asyncio.run(main(api, args.format))
+    asyncio.run(
+        main(api, args.query, args.format, args.device_type_code, args.device_feature_code)
+    )

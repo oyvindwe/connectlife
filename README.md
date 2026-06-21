@@ -20,12 +20,37 @@ python -m connectlife.dump --username <username> --password <password> [--trir]
 ```
 
 This will log in to the ConnectLife API using the provided username and password, and write a JSON
-file with all returned fields for each appliance that is registered with the account.
+file with all returned fields for each appliance that is registered with the account. Pass
+`--format dd` to instead write a mapping file YAML skeleton to be used with
+[connectlife-ha](https://github.com/oyvindwe/connectlife-ha).
+
+> **Note:** the property set a device reports is not authoritative. A device may report properties it
+> does not actually support (and may omit ones its feature code defines), so two units with the same
+> device type/feature code can report different properties. Treat dumps as a starting point for a
+> mapping, not ground truth — cross-check controls against the device or the ConnectLife app.
 
 To instead dump each appliance's energy statistics (both the `air_duct_energy` and
-`energyConsumptionCurve` endpoints), add `--format energy`:
+`energyConsumptionCurve` endpoints), use `--query energy`:
 ```bash
-python -m connectlife.dump --username <username> --password <password> --format energy
+python -m connectlife.dump --username <username> --password <password> --query energy
+```
+
+To dump each appliance's per-device static data (the `query_static_data` endpoint, keyed by puid),
+use `--query static`:
+```bash
+python -m connectlife.dump --username <username> --password <password> --query static
+```
+Because it's keyed by the device's puid, the response can differ between two physical models that
+report the same device type/feature code. The response echoes the puid, so the dump redacts the
+puid, wifi_id and device_id — but the schema is gateway-defined and may contain other identifiers,
+so review each file before sharing. (For the per-feature-code property list, use
+`--query property-list` below.)
+
+To fetch the property list for a specific device type and feature code (any code, not just ones on
+your account), use `--query property-list`:
+```bash
+python -m connectlife.dump --username <username> --password <password> \
+    --query property-list --device-type-code <type-code> --device-feature-code <feature-code>
 ```
 
 The Home Assistant integration is currently in discovery phase. Please contribute your device dumps to help

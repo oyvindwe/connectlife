@@ -38,6 +38,10 @@ GATEWAY_DEVICE_LIST_URL = f"{GATEWAY_BASE_URL}/clife-svc/pu/get_device_status_li
 GATEWAY_UPDATE_URL = f"{GATEWAY_BASE_URL}/device/pu/property/set"
 GATEWAY_ENERGY_URL = f"{GATEWAY_BASE_URL}/clife-svc/pu/air_duct_energy"
 GATEWAY_ENERGY_CONSUMPTION_URL = f"{GATEWAY_BASE_URL}/clife-svc/pu/energyConsumptionCurve"
+# Per-device static data (keyed by puid) and per-feature-code property list.
+# Exploratory: these power capability probing, not the normal poll cycle.
+GATEWAY_STATIC_DATA_URL = f"{GATEWAY_BASE_URL}/clife-svc/pu/query_static_data"
+GATEWAY_PROPERTY_LIST_URL = f"{GATEWAY_BASE_URL}/clife-svc/get_property_list"
 GATEWAY_APP_ID = "47110565134383"
 GATEWAY_APP_SECRET = "yOzhz6junYno-nmULM3Wr7PU_dpSZN22ZdluvVWZ4uW5ZwwG8fIGCHTbrhcnU-iv"
 GATEWAY_LANGUAGE_ID = "12"
@@ -210,6 +214,8 @@ class ConnectLifeApi:
     gateway_update_url = GATEWAY_UPDATE_URL
     gateway_energy_url = GATEWAY_ENERGY_URL
     gateway_energy_consumption_url = GATEWAY_ENERGY_CONSUMPTION_URL
+    gateway_static_data_url = GATEWAY_STATIC_DATA_URL
+    gateway_property_list_url = GATEWAY_PROPERTY_LIST_URL
 
     # Overridable so alternative backends (e.g. TRIR) can vary the client
     # identity and the gateway error codes they react to.
@@ -234,6 +240,8 @@ class ConnectLifeApi:
             self.gateway_update_url = f"{test_server}/device/pu/property/set"
             self.gateway_energy_url = f"{test_server}/clife-svc/pu/air_duct_energy"
             self.gateway_energy_consumption_url = f"{test_server}/clife-svc/pu/energyConsumptionCurve"
+            self.gateway_static_data_url = f"{test_server}/clife-svc/pu/query_static_data"
+            self.gateway_property_list_url = f"{test_server}/clife-svc/get_property_list"
 
         self._username = username
         self._password = password
@@ -345,6 +353,44 @@ class ConnectLifeApi:
         if data is None:
             return None
         return EnergyConsumption._from_result_data(stat_type, date_start, date_end, data)
+
+    async def query_static_data(self, puid: str) -> dict[str, Any]:
+        """Probe the per-device static data endpoint (``query_static_data``).
+
+        Keyed by ``puid``, so — unlike :meth:`get_property_list` — it can return
+        different data for two devices that share a type/feature code. The
+        response schema is gateway-defined and undocumented; this returns the raw
+        ``response`` object for inspection. Raises :class:`LifeConnectError` for
+        devices/firmware that don't support it (the error is itself informative).
+        """
+        await self._fetch_access_token()
+        return await self._request_gateway_json(
+            self.gateway_static_data_url,
+            payload={"puid": puid},
+            retry_on_reauth=True,
+            retry_on_randstr=True,
+        )
+
+    async def get_property_list(
+        self, device_type_code: str, device_feature_code: str
+    ) -> dict[str, Any]:
+        """Probe the per-feature-code property list endpoint (``get_property_list``).
+
+        Keyed by type/feature code, so it returns the *same* list for every
+        device with that code — it cannot distinguish variants that share one.
+        Returns the raw ``response`` object; schema is gateway-defined.
+        """
+        await self._fetch_access_token()
+        return await self._request_gateway_json(
+            self.gateway_property_list_url,
+            payload={
+                "deviceTypeCode": device_type_code,
+                "deviceFeatureCode": device_feature_code,
+            },
+            retry_on_reauth=True,
+            retry_on_randstr=True,
+            method="GET",
+        )
 
     async def _fetch_energy(
         self,
