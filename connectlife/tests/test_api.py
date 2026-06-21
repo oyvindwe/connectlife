@@ -20,7 +20,9 @@ from connectlife.api import (
     GATEWAY_ENERGY_CONSUMPTION_URL,
     GATEWAY_ENERGY_URL,
     GATEWAY_INVALID_ACCESS_TOKEN,
+    GATEWAY_PROPERTY_LIST_URL,
     GATEWAY_RANDSTR_CHECK_FAILED,
+    GATEWAY_STATIC_DATA_URL,
     GATEWAY_UPDATE_URL,
     LifeConnectAuthError,
     LifeConnectError,
@@ -644,6 +646,59 @@ class TestEnergyConsumption(unittest.IsolatedAsyncioTestCase):
         assert result is not None
         self.assertEqual(result.electric_total, 2.0)
         self.assertFalse(requests)
+
+
+class TestCapabilityProbes(unittest.IsolatedAsyncioTestCase):
+    """query_static_data (per puid) and get_property_list (per feature code)."""
+
+    async def test_query_static_data_returns_raw_response(self) -> None:
+        api = _cached_api()
+        requests: list[tuple[str, str, FakeResponse]] = [
+            (
+                "POST",
+                GATEWAY_STATIC_DATA_URL,
+                FakeResponse(200, {"response": {
+                    "resultCode": 0,
+                    "data": {"f_humidity": "1"},
+                }}),
+            ),
+        ]
+        with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
+            result = await api.query_static_data("puid-1")
+        self.assertEqual(result["data"], {"f_humidity": "1"})
+        self.assertFalse(requests)
+
+    async def test_get_property_list_is_a_get_request(self) -> None:
+        api = _cached_api()
+        requests: list[tuple[str, str, FakeResponse]] = [
+            (
+                "GET",
+                GATEWAY_PROPERTY_LIST_URL,
+                FakeResponse(200, {"response": {
+                    "resultCode": 0,
+                    "properties": ["t_temp", "t_up_down"],
+                }}),
+            ),
+        ]
+        with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
+            result = await api.get_property_list("009", "104")
+        self.assertEqual(result["properties"], ["t_temp", "t_up_down"])
+        self.assertFalse(requests)
+
+    async def test_gateway_error_propagates(self) -> None:
+        api = _cached_api()
+        requests: list[tuple[str, str, FakeResponse]] = [
+            (
+                "POST",
+                GATEWAY_STATIC_DATA_URL,
+                FakeResponse(200, {"response": {
+                    "resultCode": 1, "errorCode": 999, "errorDesc": "not supported",
+                }}),
+            ),
+        ]
+        with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
+            with self.assertRaises(LifeConnectError):
+                await api.query_static_data("puid-1")
 
 
 class TestRandStrRetry(unittest.IsolatedAsyncioTestCase):
