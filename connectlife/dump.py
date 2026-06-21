@@ -105,17 +105,20 @@ async def dump_static(api: ConnectLifeApi):
         base = f"{appliance.device_type_code}-{appliance.device_feature_code}"
         seen[base] = seen.get(base, 0) + 1
         name = base if seen[base] == 1 else f"{base}_{seen[base]}"
+        # query_static_data echoes the puid (and carries wifi_id/device_id keys),
+        # so scrub the identifiers we know before writing a shareable file.
+        secrets = {s for s in (appliance.puid, appliance.device_id, appliance.wifi_id) if s}
         result = {
             "deviceTypeCode": appliance.device_type_code,
             "deviceFeatureCode": appliance.device_feature_code,
-            "query_static_data": await _probe(
-                api.query_static_data, appliance.puid
+            "query_static_data": _redact(
+                await _probe(api.query_static_data, appliance.puid), secrets
             ),
         }
         filename = f"{name}-static.json"
         with open(filename, "w") as f:
             json.dump(result, f, indent=2)
-        print(f"Wrote {filename} (review for identifiers before sharing)")
+        print(f"Wrote {filename} (known identifiers redacted; review before sharing)")
 
 
 async def dump_property_list(
@@ -131,6 +134,23 @@ async def dump_property_list(
     with open(filename, "w") as f:
         json.dump(result, f, indent=2)
     print(f"Wrote {filename}")
+
+
+def _redact(value, secrets):
+    """Recursively replace any string equal to a known identifier with a marker.
+
+    ``query_static_data`` echoes the device's puid (and may carry wifi_id /
+    device_id). We can only scrub the identifiers we passed in — the schema is
+    gateway-defined and may contain others — hence the review-before-sharing
+    reminder still stands.
+    """
+    if isinstance(value, dict):
+        return {k: _redact(v, secrets) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_redact(v, secrets) for v in value]
+    if isinstance(value, str) and value in secrets:
+        return "<redacted>"
+    return value
 
 
 async def _probe(func, *args):

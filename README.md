@@ -41,8 +41,9 @@ use `--query static`:
 python -m connectlife.dump --username <username> --password <password> --query static
 ```
 Because it's keyed by the device's puid, the response can differ between two physical models that
-report the same device type/feature code. The responses are gateway-defined and may contain
-identifiers — review each file before sharing. (For the per-feature-code property list, use
+report the same device type/feature code. The response echoes the puid, so the dump redacts the
+puid, wifi_id and device_id — but the schema is gateway-defined and may contain other identifiers,
+so review each file before sharing. (For the per-feature-code property list, use
 `--query property-list` below.)
 
 To fetch the property list for a specific device type and feature code (any code, not just ones on
