@@ -17,5 +17,5 @@
 - [025](025.md): Washing Machine
 - [026](026.md): Refrigerator
 - [027](027.md): Washing Machine
-- [030](030.md): Dryer
+- [030](030.md): Tumble dryer
 - [032](032.md): Tumble Dryer
