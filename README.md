@@ -16,8 +16,10 @@ Licensed under [GPLv3](LICENSE).
 To test out the library (users in Russia/CIS may need to pass the `--trir` option):
 ```bash
 pip install connectlife
-python -m connectlife.dump --username <username> --password <password> [--trir]
+python -m connectlife.dump --username <username> [--password '<password>'] [--trir]
 ```
+Omit password to be prompted for it instead. Make sure to always use single quotes around
+passwords with special characters.
 
 This will log in to the ConnectLife API using the provided username and password, and write a JSON
 file with all returned fields for each appliance that is registered with the account. Pass
@@ -32,13 +34,13 @@ file with all returned fields for each appliance that is registered with the acc
 To instead dump each appliance's energy statistics (both the `air_duct_energy` and
 `energyConsumptionCurve` endpoints), use `--query energy`:
 ```bash
-python -m connectlife.dump --username <username> --password <password> --query energy
+python -m connectlife.dump --username <username> --query energy
 ```
 
 To dump each appliance's per-device static data (the `query_static_data` endpoint, keyed by puid),
 use `--query static`:
 ```bash
-python -m connectlife.dump --username <username> --password <password> --query static
+python -m connectlife.dump --username <username> --query static
 ```
 Because it's keyed by the device's puid, the response can differ between two physical models that
 report the same device type/feature code. The response echoes the puid, so the dump redacts the
@@ -49,7 +51,7 @@ so review each file before sharing. (For the per-feature-code property list, use
 To fetch the property list for a specific device type and feature code (any code, not just ones on
 your account), use `--query property-list`:
 ```bash
-python -m connectlife.dump --username <username> --password <password> \
+python -m connectlife.dump --username <username> \
     --query property-list --device-type-code <type-code> --device-feature-code <feature-code>
 ```
 
