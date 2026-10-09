@@ -113,14 +113,29 @@ def _as_int(value: Any) -> int | None:
     return None if number is None else int(number)
 
 
+def _as_date(value: dt.date | None) -> dt.date:
+    """Plain date for an energy request (today if None).
+
+    A ``datetime`` (a ``date`` subclass) would serialize as a full timestamp, which the
+    gateway rejects; the energy fetch then silently returns None.
+    """
+    if value is None:
+        return dt.date.today()
+    if isinstance(value, dt.datetime):
+        return value.date()
+    return value
+
+
 @dataclass(frozen=True)
 class EnergyResult:
     """Fields common to both energy endpoints.
 
     ``electric_total`` is kWh for the period; ``electric_curve`` maps bucket -> value.
-    Bucket granularity depends on the endpoint and stat_type: air_duct_energy's ``day``
-    curve is per-hour (keys ``"0"``..``"23"``), while week/month curves are per-day and
-    year is per-month. ``raw`` keeps the full resultData.
+    Bucket granularity and key format depend on the endpoint and stat_type:
+    air_duct_energy's ``day`` curve is per-hour (keys ``"0"``..``"23"``); week/month
+    curves are per-day, keyed by ISO date (``"2026-07-01"``); the year curve is per-month,
+    keyed by month-of-year (``"01"``..``"12"``), not by date. ``raw`` keeps the full
+    resultData.
     """
 
     stat_type: str
@@ -305,12 +320,13 @@ class ConnectLifeApi:
         """Fetch energy statistics from the ``air_duct_energy`` endpoint.
 
         For air conditioners; returns zeros for other device types. ``stat_type`` is one of
-        day/week/month/year for the period containing ``date`` (today if omitted). Returns
-        None if the endpoint fails for this device.
+        day/week/month/year for the period containing ``date`` (today if omitted; a
+        ``datetime`` is truncated to its date). Returns None if the endpoint fails for this
+        device.
         """
         if stat_type not in AIR_DUCT_STAT_TYPES:
             raise ValueError(f"stat_type must be one of {AIR_DUCT_STAT_TYPES}, got {stat_type!r}")
-        date_start, date_end = self._energy_date_range(stat_type, date or dt.date.today(), year_month=False)
+        date_start, date_end = self._energy_date_range(stat_type, _as_date(date), year_month=False)
         data = await self._fetch_energy(
             self.gateway_energy_url,
             puid=puid,
@@ -337,14 +353,15 @@ class ConnectLifeApi:
         """Fetch energy/water statistics from the ``energyConsumptionCurve`` endpoint.
 
         For appliances such as dishwashers and washing machines. ``stat_type`` is one of
-        week/month/year (no day — derive a daily value from the week ``electric_curve``).
-        Returns None if the endpoint fails for this device.
+        week/month/year (no day — derive a daily value from the week ``electric_curve``)
+        for the period containing ``date`` (today if omitted; a ``datetime`` is truncated
+        to its date). Returns None if the endpoint fails for this device.
         """
         if stat_type not in ENERGY_CONSUMPTION_STAT_TYPES:
             raise ValueError(
                 f"stat_type must be one of {ENERGY_CONSUMPTION_STAT_TYPES}, got {stat_type!r}"
             )
-        date = date or dt.date.today()
+        date = _as_date(date)
         date_start, date_end = self._energy_date_range(stat_type, date, year_month=True)
         # datePeriodEnd anchors the rolling energyPeriod history to the requested period.
         data = await self._fetch_energy(
