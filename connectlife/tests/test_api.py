@@ -7,7 +7,7 @@ import datetime as dt
 import json
 from typing import Any, cast
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import aiohttp
 
@@ -574,6 +574,19 @@ class TestAirDuctEnergy(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             await api.get_air_duct_energy("puid-1", "009", "100", stat_type="decade")
 
+    async def test_datetime_is_sent_as_plain_date(self) -> None:
+        # A datetime would serialize as a timestamp, which the gateway rejects (#88).
+        api = _cached_api()
+        request = AsyncMock(return_value={"resultData": {"electricTotal": 1.0}})
+        with patch.object(api, "_request_gateway_json", new=request):
+            await api.get_air_duct_energy(
+                "puid-1", "009", "100", stat_type="week",
+                date=dt.datetime(2026, 7, 1, 23, 30, tzinfo=dt.timezone(dt.timedelta(hours=2))),
+            )
+        payload = request.call_args.kwargs["payload"]
+        self.assertEqual(payload["dateStart"], "2026-06-29")
+        self.assertEqual(payload["dateEnd"], "2026-07-05")
+
     async def test_auth_failure_raises_without_relogin(self) -> None:
         # A rejected token must NOT trigger a full re-login per call (storm guard);
         # it raises LifeConnectAuthError after a single request.
@@ -641,6 +654,25 @@ class TestEnergyConsumption(unittest.IsolatedAsyncioTestCase):
         api = _cached_api()
         with self.assertRaises(ValueError):
             await api.get_energy_consumption_curve("puid-1", "015", "dishwasher-60.2", stat_type="day")
+
+    async def test_datetime_is_sent_as_plain_date(self) -> None:
+        # A datetime would serialize as a timestamp, which the gateway rejects (#88).
+        api = _cached_api()
+        request = AsyncMock(return_value={"resultData": {"electricUsage": "1.0"}})
+        date = dt.datetime(2026, 7, 1, 23, 30, tzinfo=dt.timezone(dt.timedelta(hours=2)))
+        with patch.object(api, "_request_gateway_json", new=request):
+            for stat_type, start, end in (
+                ("week", "2026-06-29", "2026-07-05"),
+                ("month", "2026-07-01", "2026-07-31"),
+                ("year", "2026-01", "2026-12"),
+            ):
+                await api.get_energy_consumption_curve(
+                    "puid-1", "015", "dishwasher-60.2", stat_type=stat_type, date=date,
+                )
+                payload = request.call_args.kwargs["payload"]
+                self.assertEqual(payload["dateStart"], start)
+                self.assertEqual(payload["dateEnd"], end)
+                self.assertEqual(payload["datePeriodEnd"], "2026-07-01")
 
     async def test_retries_on_randstr_failure(self) -> None:
         api = _cached_api()
