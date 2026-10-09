@@ -23,6 +23,13 @@ are writable and that any value is legal.
 uv run python -m connectlife.test_server
 ```
 
+To simulate an account that must accept updated Terms & Conditions, reject every login with
+`Account Pending Registration`. Add `--reject_tokens` to also reject access tokens when fetching appliances, which
+forces a re-login while already running:
+```bash
+uv run python -m connectlife.test_server -a 100 --auth_error_type pending_registration --reject_tokens
+```
+
 To use the test server, provide the URL to the test server:  
 ```python
 from connectlife.api import ConnectLifeApi

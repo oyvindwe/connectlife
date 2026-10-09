@@ -23,6 +23,9 @@ from .appliance import ConnectLifeAppliance
 _LOGGER = logging.getLogger(__name__)
 
 AUTH_TRANSIENT_STATUSES = frozenset({500, 502, 503, 504})
+# Gigya "Account Pending Registration": the account must accept updated
+# Terms & Conditions / Privacy Policy before it can log in.
+GIGYA_PENDING_REGISTRATION = 206001
 GATEWAY_RANDSTR_CHECK_FAILED = 101005
 
 DEFAULT_OAUTH_REDIRECT_URI = "https://api.connectlife.io/swagger/oauth2-redirect.html"
@@ -82,6 +85,10 @@ class LifeConnectError(Exception):
 
 class LifeConnectAuthError(LifeConnectError):
     """Authentication failure against ConnectLife."""
+
+
+class LifeConnectTermsNotAcceptedError(LifeConnectAuthError):
+    """Login rejected until updated Terms & Conditions are accepted in the ConnectLife app."""
 
 
 AIR_DUCT_STAT_TYPES = ("day", "week", "month", "year")
@@ -605,7 +612,12 @@ class ConnectLifeApi:
             error_message = body.get("errorMessage")
             error_details = body.get("errorDetails")
             if error_code or error_message or error_details:
-                raise LifeConnectAuthError(
+                error_type = (
+                    LifeConnectTermsNotAcceptedError
+                    if error_code == GIGYA_PENDING_REGISTRATION
+                    else LifeConnectAuthError
+                )
+                raise error_type(
                     f"Failed to login. Code: {error_code} Message: '{error_message}' Details: '{error_details}'"
                 )
 

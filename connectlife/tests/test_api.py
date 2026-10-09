@@ -25,6 +25,7 @@ from connectlife.api import (
     GATEWAY_STATIC_DATA_URL,
     GATEWAY_UPDATE_URL,
     LifeConnectAuthError,
+    LifeConnectTermsNotAcceptedError,
     LifeConnectError,
 )
 
@@ -218,6 +219,24 @@ class TestLoginRetry(unittest.IsolatedAsyncioTestCase):
         with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
             with self.assertRaises(LifeConnectAuthError):
                 await api.login()
+
+    async def test_pending_registration_raises_terms_not_accepted(self) -> None:
+        api = ConnectLifeApi("user@example.com", "secret")
+
+        requests: list[tuple[str, str, FakeResponse]] = [
+            ("POST", api.login_url, FakeResponse(200, {
+                "errorCode": 206001,
+                "errorMessage": "Account Pending Registration",
+                "errorDetails": "Missing required fields for registration: "
+                "preferences.terms.connectlife_terms_conditions.isConsentGranted",
+                "regToken": "reg-token",
+            })),
+        ]
+
+        with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)):
+            with self.assertRaises(LifeConnectTermsNotAcceptedError):
+                await api.login()
+        self.assertFalse(requests)
 
     async def test_non_transient_auth_error_raises_without_retry(self) -> None:
         api = ConnectLifeApi("user@example.com", "secret")
