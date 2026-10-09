@@ -13,6 +13,7 @@ from os.path import isfile, join
 from cryptography.hazmat.primitives import padding as sym_padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
+from connectlife.api import GATEWAY_INVALID_ACCESS_TOKEN
 from connectlife.trir import (
     TRIR_AES_IV,
     TRIR_AES_KEY,
@@ -26,6 +27,7 @@ failure_rate = 0
 timeout_rate = 0
 auth_error_rate = 0
 auth_error_type = "invalid_login"
+reject_tokens = False
 
 LOGIN_ERRORS = {
     "invalid_login": {
@@ -91,6 +93,9 @@ def _gateway_error(error_code, error_desc):
     )
 
 async def get_device_status_list(request):
+    if reject_tokens:
+        # Simulate the cloud invalidating the session, forcing a full re-login.
+        return _gateway_error(GATEWAY_INVALID_ACCESS_TOKEN, "Invalid access token")
     if failure_rate > randrange(100):
         return web.Response(status=500)
     if timeout_rate > randrange(100):
@@ -341,11 +346,13 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--directory', default='.', help='Directory to read dump files from')
     parser.add_argument('-a', '--auth_error_rate', type=int, default=0, help='Auth error rate in %% for login')
     parser.add_argument('--auth_error_type', choices=list(LOGIN_ERRORS.keys()), default='invalid_login', help='Type of auth error to simulate')
+    parser.add_argument('--reject_tokens', action='store_true', help='Reject access tokens when getting appliances, forcing a re-login')
     parser.add_argument('-f', '--failure_rate', type=int, default=0, help='Failure rate in %% for get appliances')
     parser.add_argument('-t', '--timeout_rate', type=int, default=0, help='Timeout rate in %% for get appliances')
     args = parser.parse_args()
     auth_error_rate = args.auth_error_rate
     auth_error_type = args.auth_error_type
+    reject_tokens = args.reject_tokens
     failure_rate = args.failure_rate
     timeout_rate = args.timeout_rate
     main(args)
