@@ -1,12 +1,16 @@
 import asyncio
 import base64
 import datetime as dt
+import functools
 import hashlib
+import hmac
 from random import randrange
 
 from aiohttp import web
+from yarl import URL
 import argparse
 import json
+import re
 from os import listdir
 from os.path import isfile, join
 
@@ -14,6 +18,7 @@ from cryptography.hazmat.primitives import padding as sym_padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from connectlife.api import GATEWAY_INVALID_ACCESS_TOKEN
+from connectlife.oauth import OAUTH2_CLIENT_ID, OAUTH2_CLIENT_SECRET
 from connectlife.trir import (
     TRIR_AES_IV,
     TRIR_AES_KEY,
@@ -65,6 +70,16 @@ async def authorize(request):
         text='{"code": "my_authorization_token"}'
     )
 
+async def oauth_login(request):
+    """Browser OAuth login page: signs in at once and redirects back with a code."""
+    redirect_uri = request.query.get("redirect_uri")
+    if not redirect_uri:
+        return web.Response(status=400, text="Missing redirect_uri")
+    location = URL(redirect_uri).update_query(
+        code="my_authorization_token", state=request.query.get("state", "")
+    )
+    raise web.HTTPFound(location)
+
 async def token(request):
     return web.Response(
         content_type="application/json",
@@ -91,6 +106,43 @@ def _gateway_error(error_code, error_desc):
             "errorDesc": error_desc,
         }}),
     )
+
+def juapi(handler):
+    """Also serve a route as the third-party API (juapi-3rd), used with OAuth tokens.
+
+    Requests signed with the ``hi-params-encrypt`` header get their HMAC signature
+    checked, and a flat reply instead of one wrapped in ``response``.
+    """
+    @functools.wraps(handler)
+    async def wrapper(request):
+        if "hi-params-encrypt" not in request.headers:
+            return await handler(request)
+        if not _juapi_signature_valid(request):
+            return web.Response(
+                content_type="application/json",
+                text=json.dumps({"resultCode": 1, "errorCode": 600912, "errorDesc": "Signature mismatch"}),
+            )
+        response = await handler(request)
+        if response.content_type == "application/json":
+            body = json.loads(response.text)
+            if isinstance(body.get("response"), dict):
+                response.text = json.dumps(body["response"])
+        return response
+    return wrapper
+
+def _juapi_signature_valid(request):
+    app_id = request.headers.get("hi-params-encrypt")
+    match = re.search(r'signature="([^"]+)"', request.headers.get("Authorization", ""))
+    if app_id != OAUTH2_CLIENT_ID or not match:
+        return False
+    signing_string = (
+        f"{app_id}\n{request.method} {request.path_qs}\ndate: {request.headers.get('Date', '')}\n"
+        f"hi-params-encrypt: {app_id}\n"
+    )
+    expected = base64.b64encode(
+        hmac.new(OAUTH2_CLIENT_SECRET.encode(), signing_string.encode(), hashlib.sha256).digest()
+    ).decode()
+    return hmac.compare_digest(match.group(1), expected)
 
 async def get_device_status_list(request):
     if reject_tokens:
@@ -338,14 +390,15 @@ def main(args):
     app = web.Application()
     app.add_routes([web.post('/accounts.login', login)])
     app.add_routes([web.post('/accounts.getJWT', get_jwt)])
+    app.add_routes([web.get('/login', oauth_login)])
     app.add_routes([web.post('/oauth/authorize', authorize)])
     app.add_routes([web.post('/oauth/token', token)])
-    app.add_routes([web.get('/clife-svc/pu/get_device_status_list', get_device_status_list)])
-    app.add_routes([web.post('/device/pu/property/set', property_set)])
+    app.add_routes([web.get('/clife-svc/pu/get_device_status_list', juapi(get_device_status_list))])
+    app.add_routes([web.post('/device/pu/property/set', juapi(property_set))])
     app.add_routes([web.post('/clife-svc/pu/air_duct_energy', air_duct_energy)])
     app.add_routes([web.post('/clife-svc/pu/energyConsumptionCurve', energy_consumption_curve)])
-    app.add_routes([web.post('/clife-svc/pu/query_static_data', query_static_data)])
-    app.add_routes([web.get('/clife-svc/get_property_list', get_property_list)])
+    app.add_routes([web.post('/clife-svc/pu/query_static_data', juapi(query_static_data))])
+    app.add_routes([web.get('/clife-svc/get_property_list', juapi(get_property_list))])
     # TRIR (Russia/CIS) backend. property/set and air_duct_energy are shared.
     app.add_routes([web.post('/account/acc/login_pwd', trir_login)])
     app.add_routes([web.post('/account/acc/refresh_token', trir_refresh_token)])
