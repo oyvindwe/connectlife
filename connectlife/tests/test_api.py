@@ -21,8 +21,11 @@ from connectlife.api import (
     GATEWAY_ENERGY_URL,
     GATEWAY_INVALID_ACCESS_TOKEN,
     GATEWAY_PROPERTY_LIST_URL,
+    GATEWAY_HOUR_POWER_URL,
     GATEWAY_RANDSTR_CHECK_FAILED,
+    GATEWAY_SELF_CHECK_URL,
     GATEWAY_STATIC_DATA_URL,
+    GATEWAY_SYSTEM_DATA_URL,
     GATEWAY_UPDATE_URL,
     LifeConnectAuthError,
     LifeConnectTermsNotAcceptedError,
@@ -735,6 +738,28 @@ class TestCapabilityProbes(unittest.IsolatedAsyncioTestCase):
             result = await api.get_property_list("009", "104")
         self.assertEqual(result["properties"], ["t_temp", "t_up_down"])
         self.assertFalse(requests)
+
+    async def test_device_probes_post_puid_to_their_endpoints(self) -> None:
+        api = _cached_api()
+        request = AsyncMock(return_value={"resultCode": 0})
+        with patch.object(api, "_request_gateway_json", request):
+            await api.query_system_data("puid-1")
+            await api.get_self_check("puid-1")
+            await api.get_hour_power("puid-1", dt.datetime(2026, 10, 11, 23, 30))
+
+        calls = [(c.args[0], c.kwargs["payload"]) for c in request.await_args_list]
+        self.assertEqual(calls, [
+            (GATEWAY_SYSTEM_DATA_URL, {"puid": "puid-1"}),
+            (GATEWAY_SELF_CHECK_URL, {"noRecord": "1", "puid": "puid-1"}),
+            (GATEWAY_HOUR_POWER_URL, {"date": "2026-10-11", "puid": "puid-1"}),
+        ])
+
+    async def test_hour_power_defaults_to_today(self) -> None:
+        api = _cached_api()
+        request = AsyncMock(return_value={"resultCode": 0})
+        with patch.object(api, "_request_gateway_json", request):
+            await api.get_hour_power("puid-1")
+        self.assertEqual(request.await_args.kwargs["payload"]["date"], dt.date.today().isoformat())
 
     async def test_gateway_error_propagates(self) -> None:
         api = _cached_api()

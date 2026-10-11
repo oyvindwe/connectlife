@@ -16,6 +16,7 @@ from connectlife import api as api_module
 from connectlife import test_server
 from connectlife.api import (
     GATEWAY_ENERGY_CONSUMPTION_URL,
+    GATEWAY_SYSTEM_DATA_URL,
     GATEWAY_INVALID_ACCESS_TOKEN,
     LifeConnectAuthError,
 )
@@ -167,6 +168,16 @@ class TestOAuthRequests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(result)
         (request,) = requests
         self.assertNotIn("hi-params-encrypt", request.get("headers", {}))
+
+    def test_routing_of_device_probes(self) -> None:
+        access_token, _ = _token_source("token-1")
+        api = OAuthConnectLifeApi(access_token)
+        # Seen on the third-party API.
+        self.assertEqual(api.gateway_self_check_url, f"{JUAPI_BASE_URL}/basic/self_check/info")
+        self.assertEqual(api.gateway_hour_power_url, f"{JUAPI_BASE_URL}/clife-svc/pu/get_hour_power")
+        # Only seen on the app gateway.
+        self.assertEqual(api.gateway_system_data_url, GATEWAY_SYSTEM_DATA_URL)
+        self.assertIn(api.gateway_system_data_url, api._app_gateway_urls)
 
     async def test_rejected_token_is_fetched_again_once(self) -> None:
         access_token, calls = _token_source("stale", "fresh")

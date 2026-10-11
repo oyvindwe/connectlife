@@ -13,7 +13,8 @@ headers, and returns ``resultCode`` at the top level instead of under
 (``Connectlife-LLC/HomeAssistantPlugin``, MIT).
 
 The third-party API has no ``air_duct_energy`` or ``energyConsumptionCurve``, so
-those two requests go to the app gateway, which accepts the same access token.
+those two requests go to the app gateway, which accepts the same access token. So
+does ``query_system_data``, which has only been seen on the app gateway.
 """
 
 from __future__ import annotations
@@ -77,16 +78,23 @@ class OAuthConnectLifeApi(ConnectLifeApi):
         self.source_id = source_id or generate_source_id()
 
         if test_server:
-            # The base class points the energy requests at the test server's app gateway.
+            # Requests to the app gateway go to the test server's app gateway routes.
             self.gateway_energy_url = f"{test_server}/clife-svc/pu/air_duct_energy"
             self.gateway_energy_consumption_url = f"{test_server}/clife-svc/pu/energyConsumptionCurve"
-        self._app_gateway_urls = {self.gateway_energy_url, self.gateway_energy_consumption_url}
+            self.gateway_system_data_url = f"{test_server}/clife-svc/pu/query_system_data"
+        self._app_gateway_urls = {
+            self.gateway_energy_url,
+            self.gateway_energy_consumption_url,
+            self.gateway_system_data_url,
+        }
 
         base = test_server or JUAPI_BASE_URL
         self.gateway_device_list_url = f"{base}/clife-svc/pu/get_device_status_list"
         self.gateway_update_url = f"{base}/device/pu/property/set"
         self.gateway_static_data_url = f"{base}/clife-svc/pu/query_static_data"
         self.gateway_property_list_url = f"{base}/clife-svc/get_property_list"
+        self.gateway_self_check_url = f"{base}/basic/self_check/info"
+        self.gateway_hour_power_url = f"{base}/clife-svc/pu/get_hour_power"
 
     async def _fetch_access_token(self) -> None:
         self._access_token = await self._get_access_token()
