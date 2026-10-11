@@ -134,8 +134,9 @@ class EnergyResult:
     Bucket granularity and key format depend on the endpoint and stat_type:
     air_duct_energy's ``day`` curve is per-hour (keys ``"0"``..``"23"``); week/month
     curves are per-day, keyed by ISO date (``"2026-07-01"``); the year curve is per-month,
-    keyed by month-of-year (``"01"``..``"12"``), not by date. ``raw`` keeps the full
-    resultData.
+    keyed by month-of-year (``"01"``..``"12"``), not by date. Some devices also add an
+    ``"all"`` key with the period total, so skip it when parsing keys. ``raw`` keeps the
+    full resultData.
     """
 
     stat_type: str
