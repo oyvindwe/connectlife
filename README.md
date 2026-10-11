@@ -114,4 +114,4 @@ go to the app gateway with the same token. If the API rejects the token twice,
 ## Test server
 
 To use the test server to support developing the Home Assistant integration, clone this repo and see
-[DEVELOPMENT.md](DEVELOPMENT.md#test-server):
+[DEVELOPMENT.md](DEVELOPMENT.md#test-server).
