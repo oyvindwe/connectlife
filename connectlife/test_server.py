@@ -145,28 +145,40 @@ async def energy_consumption_curve(request):
     # Per-day curve across [dateStart, dateEnd] (incl. today) so clients reading
     # curve[today] get a value — the real gateway returns a per-day curve. Sample
     # non-zero values so the daily sensors visibly populate. Year statType uses
-    # YYYY-MM and is left empty.
+    # YYYY-MM dates and, like the real gateway, a per-month curve keyed "01".."12".
+    # Month and year also get the "all" period-total key some devices return.
     electric_curve: dict[str, str] = {}
     water_curve: dict[str, str] = {}
-    try:
-        day = dt.date.fromisoformat(req["dateStart"])
-        end = dt.date.fromisoformat(req["dateEnd"])
-        while day <= end:
-            electric_curve[day.isoformat()] = "1.0"
-            water_curve[day.isoformat()] = "11.0"
-            day += dt.timedelta(days=1)
-    except (KeyError, ValueError):
-        pass
+    if req.get("statType") == "year":
+        for month in range(1, 13):
+            electric_curve[f"{month:02d}"] = "1.0"
+            water_curve[f"{month:02d}"] = "11.0"
+    else:
+        try:
+            day = dt.date.fromisoformat(req["dateStart"])
+            end = dt.date.fromisoformat(req["dateEnd"])
+            while day <= end:
+                electric_curve[day.isoformat()] = "1.0"
+                water_curve[day.isoformat()] = "11.0"
+                day += dt.timedelta(days=1)
+        except (KeyError, ValueError):
+            pass
+    buckets = len(electric_curve)
+    electric_usage = f"{buckets:.2f}"
+    water_usage = f"{buckets * 11:.2f}"
+    if req.get("statType") in ("month", "year"):
+        electric_curve["all"] = electric_usage
+        water_curve["all"] = water_usage
     return _gateway_ok({
         "type": req.get("statType", "week"),
         "deviceType": req.get("deviceType"),
         "resultData": {
-            "electricUsage": f"{len(electric_curve):.2f}",
-            "waterUsage": f"{len(water_curve) * 11:.2f}",
+            "electricUsage": electric_usage,
+            "waterUsage": water_usage,
             "normElectricUsage": "0.00",
             "normWaterUsage": "0.00",
             "runTimes": "0.00",
-            "cycles": len(electric_curve),
+            "cycles": buckets,
             "electricCurve": electric_curve,
             "waterCurve": water_curve,
             "programResult": [],
