@@ -45,6 +45,9 @@ GATEWAY_ENERGY_CONSUMPTION_URL = f"{GATEWAY_BASE_URL}/clife-svc/pu/energyConsump
 # Exploratory: these power capability probing, not the normal poll cycle.
 GATEWAY_STATIC_DATA_URL = f"{GATEWAY_BASE_URL}/clife-svc/pu/query_static_data"
 GATEWAY_PROPERTY_LIST_URL = f"{GATEWAY_BASE_URL}/clife-svc/get_property_list"
+GATEWAY_SYSTEM_DATA_URL = f"{GATEWAY_BASE_URL}/clife-svc/pu/query_system_data"
+GATEWAY_SELF_CHECK_URL = f"{GATEWAY_BASE_URL}/basic/self_check/info"
+GATEWAY_HOUR_POWER_URL = f"{GATEWAY_BASE_URL}/clife-svc/pu/get_hour_power"
 GATEWAY_APP_ID = "47110565134383"
 GATEWAY_APP_SECRET = "yOzhz6junYno-nmULM3Wr7PU_dpSZN22ZdluvVWZ4uW5ZwwG8fIGCHTbrhcnU-iv"
 GATEWAY_LANGUAGE_ID = "12"
@@ -239,6 +242,9 @@ class ConnectLifeApi:
     gateway_energy_consumption_url = GATEWAY_ENERGY_CONSUMPTION_URL
     gateway_static_data_url = GATEWAY_STATIC_DATA_URL
     gateway_property_list_url = GATEWAY_PROPERTY_LIST_URL
+    gateway_system_data_url = GATEWAY_SYSTEM_DATA_URL
+    gateway_self_check_url = GATEWAY_SELF_CHECK_URL
+    gateway_hour_power_url = GATEWAY_HOUR_POWER_URL
 
     # Overridable so alternative backends (e.g. TRIR) can vary the client
     # identity and the gateway error codes they react to.
@@ -265,6 +271,9 @@ class ConnectLifeApi:
             self.gateway_energy_consumption_url = f"{test_server}/clife-svc/pu/energyConsumptionCurve"
             self.gateway_static_data_url = f"{test_server}/clife-svc/pu/query_static_data"
             self.gateway_property_list_url = f"{test_server}/clife-svc/get_property_list"
+            self.gateway_system_data_url = f"{test_server}/clife-svc/pu/query_system_data"
+            self.gateway_self_check_url = f"{test_server}/basic/self_check/info"
+            self.gateway_hour_power_url = f"{test_server}/clife-svc/pu/get_hour_power"
 
         self._username = username
         self._password = password
@@ -392,6 +401,53 @@ class ConnectLifeApi:
         return await self._request_gateway_json(
             self.gateway_static_data_url,
             payload={"puid": puid},
+            retry_on_reauth=True,
+            retry_on_randstr=True,
+        )
+
+    async def query_system_data(self, puid: str) -> dict[str, Any]:
+        """Probe the per-device system data endpoint (``query_system_data``).
+
+        Keyed by ``puid``. For a dishwasher, ``data`` lists the programs with their
+        position, visibility, duration and which options each allows. The response
+        schema is gateway-defined and undocumented, and echoes the device's
+        identifiers; this returns the raw ``response`` object.
+        """
+        await self._fetch_access_token()
+        return await self._request_gateway_json(
+            self.gateway_system_data_url,
+            payload={"puid": puid},
+            retry_on_reauth=True,
+            retry_on_randstr=True,
+        )
+
+    async def get_self_check(self, puid: str) -> dict[str, Any]:
+        """Fetch the device's self-check (``/basic/self_check/info``).
+
+        ``data.selfCheckList`` lists the faults the device can report, with their
+        ``statusKey`` (e.g. ``Error-F11``), the ``statusValue`` meaning a fault, and
+        localized descriptions; ``data.selfCheckFailedList`` the current faults.
+        Returns the raw ``response`` object.
+        """
+        await self._fetch_access_token()
+        return await self._request_gateway_json(
+            self.gateway_self_check_url,
+            payload={"noRecord": "1", "puid": puid},
+            retry_on_reauth=True,
+            retry_on_randstr=True,
+        )
+
+    async def get_hour_power(self, puid: str, date: dt.date | None = None) -> dict[str, Any]:
+        """Fetch the hourly energy use for ``date`` (``get_hour_power``, today if omitted).
+
+        ``powerConsumption`` maps hour ``"0"``..``"23"`` to a value. Non-AC devices
+        reply with all zeros, even on days they were used. Returns the raw
+        ``response`` object.
+        """
+        await self._fetch_access_token()
+        return await self._request_gateway_json(
+            self.gateway_hour_power_url,
+            payload={"date": _as_date(date).isoformat(), "puid": puid},
             retry_on_reauth=True,
             retry_on_randstr=True,
         )

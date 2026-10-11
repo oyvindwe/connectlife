@@ -40,6 +40,12 @@ async def main(
     if query == "static":
         await dump_static(api)
         return
+    if query == "system":
+        await dump_per_device(api, "query_system_data", api.query_system_data, "system")
+        return
+    if query == "self-check":
+        await dump_per_device(api, "self_check", api.get_self_check, "self-check")
+        return
     if query == "property-list":
         if not device_type_code or not device_feature_code:
             raise SystemExit(
@@ -95,29 +101,35 @@ async def dump_static(api: ConnectLifeApi):
     Keyed by puid, so it can differ between two devices that share a type/feature
     code — useful for working out whether the gateway exposes anything that
     distinguishes otherwise-identical feature codes. For the per-feature-code
-    property list, use ``dump_property_list`` (``--format property-list``).
+    property list, use ``dump_property_list`` (``--query property-list``).
 
     The response schema is undocumented and may echo identifiers — review and
     redact each file before sharing.
+    """
+    await dump_per_device(api, "query_static_data", api.query_static_data, "static")
+
+
+async def dump_per_device(api: ConnectLifeApi, key: str, fetch, suffix: str):
+    """Write one ``<type>-<feature>-<suffix>.json`` file per device with ``fetch(puid)``.
+
+    The responses echo the device's identifiers, so the known ones are redacted;
+    the schema is gateway-defined and may contain others, so review each file
+    before sharing.
     """
     seen: dict[str, int] = {}
     for appliance in await api.get_appliances():
         base = f"{appliance.device_type_code}-{appliance.device_feature_code}"
         seen[base] = seen.get(base, 0) + 1
         name = base if seen[base] == 1 else f"{base}_{seen[base]}"
-        # query_static_data echoes the puid (and carries wifi_id/device_id keys),
-        # so scrub the identifiers we know before writing a shareable file.
         secrets = {s for s in (appliance.puid, appliance.device_id, appliance.wifi_id) if s}
         result = {
             "deviceTypeCode": appliance.device_type_code,
             "deviceFeatureCode": appliance.device_feature_code,
-            "query_static_data": _redact(
-                await _probe(api.query_static_data, appliance.puid), secrets
-            ),
+            key: _redact(await _probe(fetch, appliance.puid), secrets),
         }
-        filename = f"{name}-static.json"
+        filename = f"{name}-{suffix}.json"
         with open(filename, "w") as f:
-            json.dump(result, f, indent=2)
+            json.dump(result, f, indent=2, ensure_ascii=False)
         print(f"Wrote {filename} (known identifiers redacted; review before sharing)")
 
 
@@ -223,6 +235,8 @@ if __name__ == "__main__":
             "appliances": "The account's appliances (default; honors --format)",
             "energy": "Both energy endpoints' responses per device",
             "static": "The per-device query_static_data response per device",
+            "system": "The per-device query_system_data response (e.g. programs and their options)",
+            "self-check": "The per-device self-check (faults the device can report, and current ones)",
             "property-list": "The property list for --device-type-code/--device-feature-code",
         },
         default="appliances",

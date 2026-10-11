@@ -255,6 +255,45 @@ async def query_static_data(request):
         "data": {"deviceFeatureCode": appliance.get("deviceFeatureCode")},
     })
 
+async def query_system_data(request):
+    req = await request.json()
+    puid = req.get("puid")
+    if puid not in appliances:
+        return _gateway_error(404, f"Unknown puid {puid}")
+    appliance = appliances[puid]
+    # Like the real response, a list of programs with the options they allow.
+    return _gateway_ok({
+        "puid": puid,
+        "dev_type": appliance.get("deviceTypeCode"),
+        "wifi_id": None,
+        "device_id": None,
+        "data": [
+            {"Program_id": 0, "Program_position": 0, "Program_visible": 2, "Program_duration": 202},
+            {"Program_id": 1, "Program_position": 1, "Program_visible": 2, "Program_duration": 131},
+        ],
+    })
+
+async def self_check(request):
+    req = await request.json()
+    puid = req.get("puid")
+    if puid not in appliances:
+        return _gateway_error(404, f"Unknown puid {puid}")
+    appliance = appliances[puid]
+    return _gateway_ok({"data": {
+        "puid": puid,
+        "deviceType": appliance.get("deviceTypeCode"),
+        "featureCode": appliance.get("deviceFeatureCode"),
+        "selfCheckList": [{"statusKey": "Error-F11", "statusValue": "2", "content": "Water outlet"}],
+        "selfCheckFailedList": [],
+    }})
+
+async def hour_power(request):
+    req = await request.json()
+    puid = req.get("puid")
+    if puid not in appliances:
+        return _gateway_error(404, f"Unknown puid {puid}")
+    return _gateway_ok({"powerConsumption": {str(hour): "0.00" for hour in range(24)}})
+
 async def get_property_list(request):  # noqa: ARG001
     return _gateway_ok({"properties": []})
 
@@ -399,6 +438,9 @@ def main(args):
     app.add_routes([web.post('/clife-svc/pu/energyConsumptionCurve', energy_consumption_curve)])
     app.add_routes([web.post('/clife-svc/pu/query_static_data', juapi(query_static_data))])
     app.add_routes([web.get('/clife-svc/get_property_list', juapi(get_property_list))])
+    app.add_routes([web.post('/clife-svc/pu/query_system_data', juapi(query_system_data))])
+    app.add_routes([web.post('/basic/self_check/info', juapi(self_check))])
+    app.add_routes([web.post('/clife-svc/pu/get_hour_power', juapi(hour_power))])
     # TRIR (Russia/CIS) backend. property/set and air_duct_energy are shared.
     app.add_routes([web.post('/account/acc/login_pwd', trir_login)])
     app.add_routes([web.post('/account/acc/refresh_token', trir_refresh_token)])

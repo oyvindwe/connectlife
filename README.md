@@ -48,6 +48,15 @@ puid, wifi_id and device_id — but the schema is gateway-defined and may contai
 so review each file before sharing. (For the per-feature-code property list, use
 `--query property-list` below.)
 
+Two more per-device queries work the same way (one file per device, known identifiers redacted):
+- `--query system` dumps `query_system_data`. For a dishwasher it lists the programs with their
+  position, duration and which options each allows.
+- `--query self-check` dumps the device's self-check: the faults it can report (e.g. `Error-F11`,
+  with the value that means a fault and a description) and the current ones.
+
+The library also has `get_hour_power(puid, date)` for the hourly energy use of a day. Non-AC devices
+reply with zeros.
+
 To fetch the property list for a specific device type and feature code (any code, not just ones on
 your account), use `--query property-list`:
 ```bash

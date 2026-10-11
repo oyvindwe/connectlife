@@ -142,6 +142,11 @@ class TrirConnectLifeApi(ConnectLifeApi):
         self.gateway_update_url = f"{base}/device/pu/property/set"
         self.gateway_energy_url = f"{base}/clife-svc/pu/air_duct_energy"
         self.gateway_energy_consumption_url = f"{base}/clife-svc/pu/energyConsumptionCurve"
+        self.gateway_static_data_url = f"{base}/clife-svc/pu/query_static_data"
+        self.gateway_property_list_url = f"{base}/clife-svc/get_property_list"
+        self.gateway_system_data_url = f"{base}/clife-svc/pu/query_system_data"
+        self.gateway_self_check_url = f"{base}/basic/self_check/info"
+        self.gateway_hour_power_url = f"{base}/clife-svc/pu/get_hour_power"
 
     # -- Auth: initial login -------------------------------------------------
 

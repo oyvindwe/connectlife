@@ -358,3 +358,18 @@ class TestFlows(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTrirUrls(unittest.TestCase):
+    def test_device_probes_go_to_the_trir_gateway(self) -> None:
+        from connectlife.trir import TRIR_BASE_URL
+
+        api = TrirConnectLifeApi("user", "secret")
+        for url in (
+            api.gateway_static_data_url,
+            api.gateway_property_list_url,
+            api.gateway_system_data_url,
+            api.gateway_self_check_url,
+            api.gateway_hour_power_url,
+        ):
+            self.assertTrue(url.startswith(TRIR_BASE_URL), url)
