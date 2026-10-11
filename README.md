@@ -13,6 +13,8 @@ there is no guarantee that you don't experience other problems, for instance loc
 
 Licensed under [GPLv3](LICENSE).
 
+## Dumping your appliances
+
 To test out the library (users in Russia/CIS may need to pass the `--trir` option):
 ```bash
 pip install connectlife
@@ -31,38 +33,57 @@ file with all returned fields for each appliance that is registered with the acc
 > device type/feature code can report different properties. Treat dumps as a starting point for a
 > mapping, not ground truth — cross-check controls against the device or the ConnectLife app.
 
-To instead dump each appliance's energy statistics (both the `air_duct_energy` and
-`energyConsumptionCurve` endpoints), use `--query energy`:
+Pass `--query` to dump something else. Each query writes one file per appliance, except
+`property-list`. The per-device queries redact the puid, wifi_id and device_id that the responses
+echo, but the responses are undocumented and may contain other identifiers, so review each file
+before sharing.
+
+### Energy statistics
+
 ```bash
 python -m connectlife.dump --username <username> --query energy
 ```
+Writes `<type>-<feature>-energy.json` with the responses from both energy endpoints
+(`air_duct_energy` and `energyConsumptionCurve`).
 
-To dump each appliance's per-device static data (the `query_static_data` endpoint, keyed by puid),
-use `--query static`:
+### Static data
+
 ```bash
 python -m connectlife.dump --username <username> --query static
 ```
-Because it's keyed by the device's puid, the response can differ between two physical models that
-report the same device type/feature code. The response echoes the puid, so the dump redacts the
-puid, wifi_id and device_id — but the schema is gateway-defined and may contain other identifiers,
-so review each file before sharing. (For the per-feature-code property list, use
-`--query property-list` below.)
+Writes `<type>-<feature>-static.json` with the `query_static_data` response: the settings and values
+the device supports, and its firmware versions. It's per device, so it can differ between two
+models that report the same device type/feature code.
 
-Two more per-device queries work the same way (one file per device, known identifiers redacted):
-- `--query system` dumps `query_system_data`. For a dishwasher it lists the programs with their
-  position, duration and which options each allows.
-- `--query self-check` dumps the device's self-check: the faults it can report (e.g. `Error-F11`,
-  with the value that means a fault and a description) and the current ones.
+### System data
 
-The library also has `get_hour_power(puid, date)` for the hourly energy use of a day. Non-AC devices
-reply with zeros.
+```bash
+python -m connectlife.dump --username <username> --query system
+```
+Writes `<type>-<feature>-system.json` with the `query_system_data` response. For a dishwasher it
+lists the programs with their position, duration and which options each allows.
 
-To fetch the property list for a specific device type and feature code (any code, not just ones on
-your account), use `--query property-list`:
+### Self-check
+
+```bash
+python -m connectlife.dump --username <username> --query self-check
+```
+Writes `<type>-<feature>-self-check.json` with the faults the device can report (e.g. `Error-F11`,
+with the value that means a fault and a description) and the current ones.
+
+### Property list
+
 ```bash
 python -m connectlife.dump --username <username> \
     --query property-list --device-type-code <type-code> --device-feature-code <feature-code>
 ```
+Writes `<type>-<feature>-property-list.json` with the property list for a device type and feature
+code (any code, not just ones on your account).
+
+### Hourly power
+
+There is no dump query for this, but the library has `get_hour_power(puid, date)` for the hourly
+energy use of a day. Non-AC devices reply with zeros.
 
 ## OAuth (browser sign-in)
 
@@ -89,9 +110,6 @@ The client ID and secret are Hisense's client for Home Assistant. Requests go to
 third-party API (`juapi-3rd.hijuconn.com`), except energy statistics, which it doesn't have; those
 go to the app gateway with the same token. If the API rejects the token twice,
 `LifeConnectAuthError` is raised and the sign-in should be repeated. Persist the `source_id`.
-
-The Home Assistant integration is currently in discovery phase. Please contribute your device dumps to help
-the development.
 
 ## Test server
 
