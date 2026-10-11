@@ -55,6 +55,32 @@ python -m connectlife.dump --username <username> \
     --query property-list --device-type-code <type-code> --device-feature-code <feature-code>
 ```
 
+## OAuth (browser sign-in)
+
+`OAuthConnectLifeApi` uses tokens from the browser sign-in on `oauth.hijuconn.com`, which also
+supports Google, Apple, Facebook and Microsoft accounts and accepting updated terms. The caller
+runs the authorization code flow and refreshes the tokens (in Home Assistant, the OAuth2 config
+flow), and passes a callback returning a valid access token:
+
+```python
+from connectlife.oauth import (
+    OAUTH2_AUTHORIZE_URL,
+    OAUTH2_CLIENT_ID,
+    OAUTH2_CLIENT_SECRET,
+    OAUTH2_TOKEN_URL,
+    OAuthConnectLifeApi,
+    generate_source_id,
+)
+
+api = OAuthConnectLifeApi(get_access_token, source_id=stored_source_id)
+appliances = await api.get_appliances()
+```
+
+The client ID and secret are Hisense's client for Home Assistant. Requests go to Hisense's
+third-party API (`juapi-3rd.hijuconn.com`), except energy statistics, which it doesn't have; those
+go to the app gateway with the same token. If the API rejects the token twice,
+`LifeConnectAuthError` is raised and the sign-in should be repeated. Persist the `source_id`.
+
 The Home Assistant integration is currently in discovery phase. Please contribute your device dumps to help
 the development.
 
