@@ -36,6 +36,9 @@ Options:
 | `--reject_tokens`         | off             | Reject access tokens when fetching appliances, forcing a re-login.  |
 | `-f`, `--failure_rate`    | `0`             | Percentage of appliance fetches that fail.                          |
 | `-t`, `--timeout_rate`    | `0`             | Percentage of appliance fetches that take over 10 seconds.          |
+| `--missing_rate`          | `0`             | Percentage per appliance of leaving it out of an appliance fetch.   |
+| `--no_status_rate`        | `0`             | Percentage per appliance of sending it without its `statusList`.    |
+| `--partial_status_rate`   | `0`             | Percentage per appliance of sending about half of its `statusList`. |
 
 To simulate an account that must accept updated Terms & Conditions, reject every login with
 `Account Pending Registration`. Add `--reject_tokens` to also reject access tokens when fetching appliances, which

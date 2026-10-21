@@ -268,7 +268,7 @@ class TestLoginRetry(unittest.IsolatedAsyncioTestCase):
 class TestGetAppliances(unittest.IsolatedAsyncioTestCase):
     """Appliance list fetching via the HijuConn gateway."""
 
-    async def test_get_appliances_drops_incomplete_payload_on_cold_start(self) -> None:
+    async def test_get_appliances_keeps_payload_without_status_list_on_cold_start(self) -> None:
         api = ConnectLifeApi("user@example.com", "secret")
         api._access_token = "cached-access-token"
         api._expires = dt.datetime.now() + dt.timedelta(minutes=5)
@@ -279,15 +279,16 @@ class TestGetAppliances(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(requests)),
-            self.assertLogs("connectlife.api", level="WARNING") as captured,
+            self.assertLogs("connectlife.appliance", level="WARNING") as captured,
         ):
             appliances = await api.get_appliances()
 
-        self.assertEqual(len(appliances), 0)
-        self.assertIn("no statusList available", captured.output[0])
+        self.assertEqual(len(appliances), 1)
+        self.assertEqual(appliances[0].status_list, {})
+        self.assertIn("statusList; using empty status list", captured.output[0])
         self.assertFalse(requests)
 
-    async def test_get_appliances_drops_new_device_without_status_list_while_keeping_cached(self) -> None:
+    async def test_get_appliances_keeps_new_device_without_status_list_while_using_cached(self) -> None:
         api = ConnectLifeApi("user@example.com", "secret")
         api._access_token = "cached-access-token"
         api._expires = dt.datetime.now() + dt.timedelta(minutes=5)
@@ -299,9 +300,10 @@ class TestGetAppliances(unittest.IsolatedAsyncioTestCase):
             ])),
         ]
         with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(first_requests)):
-            await api.get_appliances()
+            appliances = await api.get_appliances()
+        self.assertFalse(appliances[0].status_list_cached)
 
-        # Second fetch — device-1 missing statusList (use cache), device-2 new without statusList (drop)
+        # Second fetch — device-1 missing statusList (use cache), device-2 new without statusList (empty)
         second_requests: list[tuple[str, str, FakeResponse]] = [
             ("GET", GATEWAY_DEVICE_LIST_URL, _gateway_device_list_response([
                 _appliance_payload(device_id="device-1"),
@@ -311,9 +313,11 @@ class TestGetAppliances(unittest.IsolatedAsyncioTestCase):
         with patch.object(api_module.aiohttp, "ClientSession", new=FakeClientSessionFactory(second_requests)):
             appliances = await api.get_appliances()
 
-        self.assertEqual(len(appliances), 1)
-        self.assertEqual(appliances[0].device_id, "device-1")
+        self.assertEqual([a.device_id for a in appliances], ["device-1", "device-2"])
         self.assertEqual(appliances[0].status_list, {"t_temp": 22})
+        self.assertEqual(appliances[1].status_list, {})
+        self.assertTrue(appliances[0].status_list_cached)
+        self.assertFalse(appliances[1].status_list_cached)
 
     async def test_get_appliances_preserves_cached_datetime_status_values(self) -> None:
         api = ConnectLifeApi("user@example.com", "secret")

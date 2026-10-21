@@ -40,6 +40,9 @@ DEVICE_TYPES = {
 }
 
 
+# Payload key set when the status list is the cached one, because the cloud sent none.
+STATUS_LIST_CACHED = "_statusListCached"
+
 RE_DATETIME = re.compile(r"^(\d{4,5})/(\d{1,2})/(\d{1,2})T(\d{1,2}):(\d{1,2}):(\d{1,2})$")
 MAX_DATETIME = dt.datetime(dt.MAXYEAR, 12, 31, 23, 59, 59, tzinfo=dt.UTC)
 
@@ -74,6 +77,7 @@ class ConnectLifeAppliance:
             )
             raw_status_list = {}
         self._status_list = {k: convert(v) for k, v in raw_status_list.items()}
+        self._status_list_cached = bool(data.get(STATUS_LIST_CACHED))
         self._device_type = DEVICE_TYPES[self._device_type_code] \
             if self._device_type_code in DEVICE_TYPES \
             else DeviceType.UNKNOWN
@@ -129,6 +133,11 @@ class ConnectLifeAppliance:
     @property
     def status_list(self) -> Dict[str, str | int | float | dt.datetime]:
         return self._status_list
+
+    @property
+    def status_list_cached(self) -> bool:
+        """True if the cloud sent no status list, and this is the last one received."""
+        return self._status_list_cached
 
     @property
     def use_time(self) -> dt.datetime | None:
