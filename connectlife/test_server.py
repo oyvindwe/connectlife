@@ -30,6 +30,9 @@ from connectlife.trir import (
 appliances = {}
 failure_rate = 0
 timeout_rate = 0
+missing_rate = 0
+no_status_rate = 0
+partial_status_rate = 0
 auth_error_rate = 0
 auth_error_type = "invalid_login"
 reject_tokens = False
@@ -144,6 +147,21 @@ def _juapi_signature_valid(request):
     ).decode()
     return hmac.compare_digest(match.group(1), expected)
 
+def _device_list() -> list[dict]:
+    """Return the appliances, simulating the cloud leaving devices out of the list or
+    sending them without, or with only part of, their statusList."""
+    device_list = []
+    for appliance in appliances.values():
+        if missing_rate > randrange(100):
+            continue
+        if no_status_rate > randrange(100):
+            appliance = {k: v for k, v in appliance.items() if k != "statusList"}
+        elif partial_status_rate > randrange(100):
+            status_list = appliance["statusList"]
+            appliance = {**appliance, "statusList": {k: v for k, v in status_list.items() if randrange(2)}}
+        device_list.append(appliance)
+    return device_list
+
 async def get_device_status_list(request):
     if reject_tokens:
         # Simulate the cloud invalidating the session, forcing a full re-login.
@@ -152,7 +170,7 @@ async def get_device_status_list(request):
         return web.Response(status=500)
     if timeout_rate > randrange(100):
         await asyncio.sleep(10.1)
-    return _gateway_ok({"deviceList": list(appliances.values())})
+    return _gateway_ok({"deviceList": _device_list()})
 
 async def property_set(request):
     req = await request.json()
@@ -400,7 +418,7 @@ async def trir_device_tab_list(request):  # noqa: ARG001
     if timeout_rate > randrange(100):
         await asyncio.sleep(10.1)
     return _trir_ok({
-        "deviceList": list(appliances.values()),
+        "deviceList": _device_list(),
         "tabCardList": [],
         "roomList": [],
         "floorList": [],
@@ -456,10 +474,16 @@ if __name__ == '__main__':
     parser.add_argument('--reject_tokens', action='store_true', help='Reject access tokens when getting appliances, forcing a re-login')
     parser.add_argument('-f', '--failure_rate', type=int, default=0, help='Failure rate in %% for get appliances')
     parser.add_argument('-t', '--timeout_rate', type=int, default=0, help='Timeout rate in %% for get appliances')
+    parser.add_argument('--missing_rate', type=int, default=0, help='Rate in %% per appliance of leaving it out of get appliances')
+    parser.add_argument('--no_status_rate', type=int, default=0, help='Rate in %% per appliance of omitting its statusList in get appliances')
+    parser.add_argument('--partial_status_rate', type=int, default=0, help='Rate in %% per appliance of sending about half of its statusList in get appliances')
     args = parser.parse_args()
     auth_error_rate = args.auth_error_rate
     auth_error_type = args.auth_error_type
     reject_tokens = args.reject_tokens
     failure_rate = args.failure_rate
     timeout_rate = args.timeout_rate
+    missing_rate = args.missing_rate
+    no_status_rate = args.no_status_rate
+    partial_status_rate = args.partial_status_rate
     main(args)

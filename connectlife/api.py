@@ -18,7 +18,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 
-from .appliance import ConnectLifeAppliance
+from .appliance import STATUS_LIST_CACHED, ConnectLifeAppliance
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -540,37 +540,23 @@ class ConnectLifeApi:
         return date.isoformat(), date.isoformat()
 
     def _normalize_appliance_payloads(self, payloads: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Preserve cached statusList when upstream omits it."""
+        """Preserve cached statusList when upstream omits it, and mark it as cached.
+
+        An appliance without statusList and no cached value is kept with an empty status
+        list, so it stays in the appliance list.
+        """
         cached = {a.device_id: a.status_list for a in self.appliances}
-        if not cached:
-            return self._drop_incomplete_appliance_payloads(payloads)
         result: list[dict[str, Any]] = []
         for p in payloads:
             device_id = p.get("deviceId")
-            if "statusList" not in p and device_id in cached:
+            if not isinstance(p.get("statusList"), dict) and device_id in cached:
                 _LOGGER.debug(
                     "Appliance %s payload missing statusList, using cached value",
                     device_id,
                 )
-                p = {**p, "statusList": cached[device_id]}
+                p = {**p, "statusList": cached[device_id], STATUS_LIST_CACHED: True}
             result.append(p)
-        return self._drop_incomplete_appliance_payloads(result)
-
-    @staticmethod
-    def _drop_incomplete_appliance_payloads(
-        payloads: list[dict[str, Any]],
-    ) -> list[dict[str, Any]]:
-        """Drop entries that still lack a statusList after normalization."""
-        complete: list[dict[str, Any]] = []
-        for p in payloads:
-            if "statusList" not in p:
-                _LOGGER.warning(
-                    "Dropping appliance %s: no statusList available",
-                    p.get("deviceId"),
-                )
-                continue
-            complete.append(p)
-        return complete
+        return result
 
     # -- Appliance requests (HijuConn gateway) --------------------------------
 
