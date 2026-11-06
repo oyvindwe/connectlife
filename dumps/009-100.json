@@ -14,6 +14,9 @@
   "roomId": 5592711,
   "roomName": "default_room",
   "seq": 0,
+  "writeOnlyProperties": [
+    "t_dimmer"
+  ],
   "statusList": {
     "f_e_arkgrille": "0",
     "f_e_incoiltemp": "0",

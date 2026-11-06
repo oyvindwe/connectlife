@@ -19,6 +19,9 @@
   "roomId": 5031839,
   "roomName": "Bedroom",
   "seq": 0,
+  "writeOnlyProperties": [
+    "t_dimmer"
+  ],
   "statusList": {
     "f-filter": "0",
     "f_e_arkgrille": "0",

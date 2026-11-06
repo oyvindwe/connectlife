@@ -11,6 +11,9 @@
   "role": 2,
   "roomId": 106345,
   "roomName": "default_room",
+  "writeOnlyProperties": [
+    "Actions"
+  ],
   "statusList": {
     "Adaptive_sense_setting": "1",
     "Add_moist_now": "0",

@@ -28,6 +28,8 @@ from connectlife.trir import (
 )
 
 appliances = {}
+# Per puid: properties the device accepts but never reports (e.g. Actions), from the dump's writeOnlyProperties.
+write_only: dict[str, set[str]] = {}
 failure_rate = 0
 timeout_rate = 0
 missing_rate = 0
@@ -179,11 +181,15 @@ async def property_set(request):
     if puid not in appliances:
         return _gateway_error(404, f"Unknown puid {puid}")
     appliance = appliances[puid]
-    unknowns = [key for key in properties if key not in appliance["statusList"]]
+    accepted = write_only.get(puid, set())
+    unknowns = [key for key in properties if key not in appliance["statusList"] and key not in accepted]
     if unknowns:
+        print(f"Rejected for {appliance['deviceId']}: {properties} (unknown {unknowns})", flush=True)
         return _gateway_error(400, f"Unknown properties {unknowns}")
+    print(f"Set for {appliance['deviceId']}: {properties}", flush=True)
     for key in properties:
-        appliance["statusList"][key] = properties[key]
+        if key in appliance["statusList"]:
+            appliance["statusList"][key] = properties[key]
     return _gateway_ok()
 
 async def air_duct_energy(request):
@@ -435,6 +441,8 @@ def main(args):
             appliance = json.load(f)
             appliance["deviceId"] = filename[0:-5]
             appliance["puid"] = f"puid{appliance['deviceId']}"
+            # Test-server only: accepted on write, never reported, and not served to clients.
+            write_only[appliance["puid"]] = set(appliance.pop("writeOnlyProperties", []))
             # Expose both feature code fields so a single running server can
             # serve EU (deviceFeatureCode) and TRIR (featureCode) clients,
             # regardless of which dump format the base file uses.
