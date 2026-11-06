@@ -11,6 +11,9 @@
   "role": 1,
   "roomId": 144011,
   "roomName": "cap lab",
+  "writeOnlyProperties": [
+    "Actions"
+  ],
   "statusList": {
     "Delay_start_status": "0",
     "Device_status": "3011",

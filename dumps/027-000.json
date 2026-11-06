@@ -11,6 +11,9 @@
   "role": 2,
   "roomId": 106345,
   "roomName": "default_room",
+  "writeOnlyProperties": [
+    "Actions"
+  ],
   "statusList": {
     "Current_washing_program_phase_status": "15",
     "Selected_program_Super_rinse": "0",

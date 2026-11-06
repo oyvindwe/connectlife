@@ -15,6 +15,9 @@
   "roomId": 8519561,
   "roomName": "Kitchen",
   "seq": 0,
+  "writeOnlyProperties": [
+    "Actions"
+  ],
   "statusList": {
     "Adaptive_sense_setting": "0",
     "Alarm_aquaClean_finished": "0",

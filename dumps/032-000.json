@@ -13,6 +13,9 @@
   "roomId": 3646057,
   "roomName": "default_room",
   "seq": 1,
+  "writeOnlyProperties": [
+    "Actions"
+  ],
   "statusList": {
     "AdaptTech_setting": "2",
     "Alarm_1": "1",

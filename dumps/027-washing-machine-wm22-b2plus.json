@@ -14,6 +14,9 @@
   "roomId": 7040508,
   "roomName": "Vasket\u00f8jsrum",
   "seq": 0,
+  "writeOnlyProperties": [
+    "Actions"
+  ],
   "statusList": {
     "ADS_Dirtiness_setting_status": "0",
     "Adapt_sense_setting_status": "1",

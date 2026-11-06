@@ -19,7 +19,18 @@ The server reads all JSON files in a directory (by default the current one) and 
 appliances, so the directory must only contain appliance dumps (`python -m connectlife.dump`), not
 the files from other `--query` variants. The file name becomes the device ID. Properties can be
 updated but are not persisted. The only validation is that the `puid` and `property` exist; it
-assumes that all properties are writable and that any value is legal.
+assumes that all properties are writable and that any value is legal. Every update is logged to the console.
+
+Some devices accept properties they never report, e.g. `Actions` on washing machines or `t_dimmer` on some air
+conditioners. List them in the dump file under `writeOnlyProperties` (test server only; not served to clients):
+writes to them are accepted and logged, but not stored in the status.
+```json
+{
+  "deviceTypeCode": "027",
+  "writeOnlyProperties": ["Actions"],
+  "statusList": { ... }
+}
+```
 
 ```bash
 uv run python -m connectlife.test_server [-d <dumps_dir>] [-p <port>]

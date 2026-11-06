@@ -16,6 +16,9 @@
   "roomId": 4924812,
   "roomName": "Laundry Room",
   "seq": 0,
+  "writeOnlyProperties": [
+    "Actions"
+  ],
   "statusList": {
     "Adapt_sense_setting_status": "2",
     "Air_dry_function_status": "0",
