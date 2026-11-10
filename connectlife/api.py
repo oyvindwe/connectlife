@@ -48,6 +48,8 @@ GATEWAY_PROPERTY_LIST_URL = f"{GATEWAY_BASE_URL}/clife-svc/get_property_list"
 GATEWAY_SYSTEM_DATA_URL = f"{GATEWAY_BASE_URL}/clife-svc/pu/query_system_data"
 GATEWAY_SELF_CHECK_URL = f"{GATEWAY_BASE_URL}/basic/self_check/info"
 GATEWAY_HOUR_POWER_URL = f"{GATEWAY_BASE_URL}/clife-svc/pu/get_hour_power"
+GATEWAY_PUSH_REGISTER_URL = f"{GATEWAY_BASE_URL}/msg/registerPhoneDevice"
+GATEWAY_PUSH_CHANNELS_URL = f"{GATEWAY_BASE_URL}/msg/get_msg_and_channels"
 GATEWAY_APP_ID = "47110565134383"
 GATEWAY_APP_SECRET = "yOzhz6junYno-nmULM3Wr7PU_dpSZN22ZdluvVWZ4uW5ZwwG8fIGCHTbrhcnU-iv"
 GATEWAY_LANGUAGE_ID = "12"
@@ -245,6 +247,10 @@ class ConnectLifeApi:
     gateway_system_data_url = GATEWAY_SYSTEM_DATA_URL
     gateway_self_check_url = GATEWAY_SELF_CHECK_URL
     gateway_hour_power_url = GATEWAY_HOUR_POWER_URL
+    gateway_push_register_url = GATEWAY_PUSH_REGISTER_URL
+    gateway_push_channels_url = GATEWAY_PUSH_CHANNELS_URL
+    # The push server is reached with TLS; the test server serves plain WebSockets.
+    push_scheme = "wss"
 
     # Overridable so alternative backends (e.g. TRIR) can vary the client
     # identity and the gateway error codes they react to.
@@ -274,6 +280,9 @@ class ConnectLifeApi:
             self.gateway_system_data_url = f"{test_server}/clife-svc/pu/query_system_data"
             self.gateway_self_check_url = f"{test_server}/basic/self_check/info"
             self.gateway_hour_power_url = f"{test_server}/clife-svc/pu/get_hour_power"
+            self.gateway_push_register_url = f"{test_server}/msg/registerPhoneDevice"
+            self.gateway_push_channels_url = f"{test_server}/msg/get_msg_and_channels"
+            self.push_scheme = "ws"
 
         self._username = username
         self._password = password
