@@ -82,10 +82,15 @@ class OAuthConnectLifeApi(ConnectLifeApi):
             self.gateway_energy_url = f"{test_server}/clife-svc/pu/air_duct_energy"
             self.gateway_energy_consumption_url = f"{test_server}/clife-svc/pu/energyConsumptionCurve"
             self.gateway_system_data_url = f"{test_server}/clife-svc/pu/query_system_data"
+            self.gateway_push_register_url = f"{test_server}/msg/registerPhoneDevice"
+            self.gateway_push_channels_url = f"{test_server}/msg/get_msg_and_channels"
+            self.push_scheme = "ws"
         self._app_gateway_urls = {
             self.gateway_energy_url,
             self.gateway_energy_consumption_url,
             self.gateway_system_data_url,
+            self.gateway_push_register_url,
+            self.gateway_push_channels_url,
         }
 
         base = test_server or JUAPI_BASE_URL

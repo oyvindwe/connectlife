@@ -27,6 +27,7 @@ Usage::
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import binascii
 import json
@@ -44,6 +45,8 @@ STATUS_MESSAGE = "status_devicestatus"
 STATE_CHANGE_MESSAGE = "iot_devicestate_change"
 WIFI_STATUS_MESSAGE = "status_wifistatus"
 DEFAULT_HEARTBEAT = 30
+# Seconds to wait for the WebSocket handshake. Once connected, the heartbeat detects a dead connection.
+CONNECT_TIMEOUT = 30
 
 
 @dataclass(frozen=True)
@@ -125,6 +128,7 @@ class ConnectLifePush:
         self._api = api
         self._phone_code = phone_code
         self._ws: aiohttp.ClientWebSocketResponse | None = None
+        self._closed = False
 
     async def register(self) -> None:
         """Register the phone code for push messages."""
@@ -146,7 +150,10 @@ class ConnectLifePush:
         )
         channels = info.get("pushChannels") or []
         if not channels or not info.get("pushServerIp"):
-            raise LifeConnectError("No push channel in response", endpoint=self._api.gateway_push_channels_url)
+            raise LifeConnectError(
+                f"No push channel in response (keys {sorted(info)}, {len(channels)} channels)",
+                endpoint=self._api.gateway_push_channels_url,
+            )
         return PushServer(
             host=info["pushServerIp"],
             port=int(info.get("pushServerPort") or 0),
@@ -161,32 +168,54 @@ class ConnectLifePush:
         return f"{self._api.push_scheme}://{server.host}:{port}/ws/{server.channel}"
 
     async def listen(self) -> AsyncIterator[PushEvent]:
-        """Register, connect and yield events until the connection is lost or close() is called."""
+        """Register, connect and yield events until the connection is lost or close() is called.
+
+        Raises LifeConnectError if it can't connect. Errors never include the URL, which has the access token.
+        """
+        self._closed = False
         await self.register()
         server = await self.get_server()
+        if self._closed:
+            return
         token = self._api._require_access_token()
         url = self._url(server)
         _LOGGER.debug("Connecting to push server %s", url)
         async with aiohttp.ClientSession() as session:
-            async with session.ws_connect(
-                url,
-                params={"phoneCode": self._phone_code, "token": token},
-                heartbeat=server.heartbeat,
-            ) as ws:
+            ws = await self._connect(session, url, token, server.heartbeat)
+            async with ws:
                 self._ws = ws
                 try:
+                    if self._closed:
+                        return
                     yield PushConnected()
                     async for msg in ws:
                         if msg.type == aiohttp.WSMsgType.TEXT:
                             if (event := parse_message(msg.data)) is not None:
                                 yield event
                         elif msg.type == aiohttp.WSMsgType.ERROR:
-                            raise LifeConnectError(f"Push connection failed: {ws.exception()}", endpoint=url)
+                            raise LifeConnectError(f"Push connection failed: {type(ws.exception()).__name__}", endpoint=url)
                 finally:
                     self._ws = None
         _LOGGER.debug("Push connection closed")
 
+    async def _connect(
+        self, session: aiohttp.ClientSession, url: str, token: str, heartbeat: int
+    ) -> aiohttp.ClientWebSocketResponse:
+        try:
+            async with asyncio.timeout(CONNECT_TIMEOUT):
+                return await session.ws_connect(
+                    url, params={"phoneCode": self._phone_code, "token": token}, heartbeat=heartbeat
+                )
+        except aiohttp.ClientResponseError as err:
+            # The error's text has the URL, and with it the access token.
+            raise LifeConnectError(f"Push connection refused: status {err.status}", endpoint=url) from None
+        except aiohttp.ClientError as err:
+            raise LifeConnectError(f"Push connection failed: {type(err).__name__}", endpoint=url) from None
+        except TimeoutError:
+            raise LifeConnectError("Push connection timed out", endpoint=url) from None
+
     async def close(self) -> None:
-        """Close the connection, ending listen()."""
+        """Close the connection, ending listen(); if it isn't connected yet, it won't connect."""
+        self._closed = True
         if self._ws is not None:
             await self._ws.close()

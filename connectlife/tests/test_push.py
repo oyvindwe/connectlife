@@ -10,7 +10,8 @@ import unittest
 from aiohttp.test_utils import TestServer
 
 from connectlife import test_server
-from connectlife.api import ConnectLifeApi
+from connectlife.api import ConnectLifeApi, LifeConnectError
+from connectlife.oauth import OAuthConnectLifeApi
 from connectlife.push import ConnectLifePush, PushConnected, PushOnline, PushStatus, parse_message
 
 
@@ -77,6 +78,36 @@ class PushTestServerTest(unittest.IsolatedAsyncioTestCase):
         finally:
             test_server.push_close_after = 0
         self.assertEqual(events, [PushConnected()])
+
+    async def test_oauth_client(self) -> None:
+        async def access_token() -> str:
+            return "my_access_token"
+
+        api = OAuthConnectLifeApi(access_token, test_server=str(self.server.make_url("")).rstrip("/"))
+        push = ConnectLifePush(api, "phone")
+        events = push.listen()
+        self.assertEqual(await anext(events), PushConnected())
+        await push.close()
+
+    async def test_refused_connection_hides_token(self) -> None:
+        self.api._access_token = "secret-token"
+        with self.assertRaises(LifeConnectError) as raised:
+            await anext(ConnectLifePush(self.api, "phone").listen())
+        self.assertIn("status 403", str(raised.exception))
+        self.assertNotIn("secret-token", str(raised.exception))
+        self.assertIsNone(raised.exception.__cause__)
+        self.assertTrue(raised.exception.__suppress_context__)
+
+    async def test_close_before_connected(self) -> None:
+        push = ConnectLifePush(self.api, "phone")
+        register = push.register
+
+        async def register_then_close() -> None:
+            await register()
+            await push.close()
+
+        push.register = register_then_close  # type: ignore[method-assign]
+        self.assertEqual([event async for event in push.listen()], [])
 
 
 if __name__ == "__main__":
