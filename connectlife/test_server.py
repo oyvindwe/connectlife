@@ -4,7 +4,7 @@ import datetime as dt
 import functools
 import hashlib
 import hmac
-from random import randrange
+from random import choice, randrange
 
 from aiohttp import web
 from yarl import URL
@@ -41,6 +41,8 @@ reject_tokens = False
 # Open push WebSockets, and seconds after which the server drops each one (0: never).
 push_sockets: set[web.WebSocketResponse] = set()
 push_close_after = 0
+# Seconds between taking a random device offline, and bringing it back online, over push (0: never).
+push_offline_every = 0
 PUSH_CHANNEL = "test-channel"
 
 LOGIN_ERRORS = {
@@ -235,6 +237,27 @@ async def _push_status(appliance):
         if not ws.closed:
             await ws.send_str(message)
 
+async def _push_offline_flaps(ws):
+    """Every push_offline_every seconds, take a random device offline, and bring it back online the next time."""
+    offline = None
+    while not ws.closed:
+        await asyncio.sleep(push_offline_every)
+        if offline is None:
+            if not appliances:
+                continue
+            offline = choice(list(appliances.values()))
+            online = False
+        else:
+            online = True
+        # Polls report the same state.
+        offline["offlineState"] = 1 if online else 0
+        content = {"data": {"deviceId": offline["puid"], "online": "1" if online else "0"}}
+        print(f"Pushed {offline['deviceId']} {'online' if online else 'offline'}", flush=True)
+        if not ws.closed:
+            await ws.send_str(_push_message("iot_devicestate_change", content))
+        if online:
+            offline = None
+
 async def push_websocket(request):
     if request.match_info["channel"] != PUSH_CHANNEL or request.query.get("token") != "my_access_token":
         return web.Response(status=403)
@@ -245,6 +268,7 @@ async def push_websocket(request):
     closer = None
     if push_close_after:
         closer = asyncio.get_running_loop().call_later(push_close_after, lambda: asyncio.ensure_future(ws.close()))
+    flapper = asyncio.ensure_future(_push_offline_flaps(ws)) if push_offline_every else None
     try:
         async for _ in ws:
             pass  # clients don't send anything; pings are answered by aiohttp
@@ -252,6 +276,8 @@ async def push_websocket(request):
         push_sockets.discard(ws)
         if closer:
             closer.cancel()
+        if flapper:
+            flapper.cancel()
         print(f"Push connection closed ({len(push_sockets)} open)", flush=True)
     return ws
 
@@ -553,6 +579,7 @@ if __name__ == '__main__':
     parser.add_argument('--auth_error_type', choices=list(LOGIN_ERRORS.keys()), default='invalid_login', help='Type of auth error to simulate')
     parser.add_argument('--reject_tokens', action='store_true', help='Reject access tokens when getting appliances, forcing a re-login')
     parser.add_argument('--push_close_after', type=int, default=0, help='Drop each push WebSocket after this many seconds')
+    parser.add_argument('--push_offline_every', type=int, default=0, help='Push a random device offline, then online again, every this many seconds')
     parser.add_argument('-f', '--failure_rate', type=int, default=0, help='Failure rate in %% for get appliances')
     parser.add_argument('-t', '--timeout_rate', type=int, default=0, help='Timeout rate in %% for get appliances')
     parser.add_argument('--missing_rate', type=int, default=0, help='Rate in %% per appliance of leaving it out of get appliances')
@@ -563,6 +590,7 @@ if __name__ == '__main__':
     auth_error_type = args.auth_error_type
     reject_tokens = args.reject_tokens
     push_close_after = args.push_close_after
+    push_offline_every = args.push_offline_every
     failure_rate = args.failure_rate
     timeout_rate = args.timeout_rate
     missing_rate = args.missing_rate

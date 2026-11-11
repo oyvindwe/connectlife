@@ -79,6 +79,20 @@ class PushTestServerTest(unittest.IsolatedAsyncioTestCase):
             test_server.push_close_after = 0
         self.assertEqual(events, [PushConnected()])
 
+    async def test_offline_flaps(self) -> None:
+        test_server.push_offline_every = 0.1
+        try:
+            push = ConnectLifePush(self.api, "phone")
+            events = push.listen()
+            self.assertEqual(await anext(events), PushConnected())
+            self.assertEqual(await asyncio.wait_for(anext(events), timeout=5), PushOnline("puid1", False))
+            self.assertEqual(test_server.appliances["puid1"]["offlineState"], 0)
+            self.assertEqual(await asyncio.wait_for(anext(events), timeout=5), PushOnline("puid1", True))
+            self.assertEqual(test_server.appliances["puid1"]["offlineState"], 1)
+            await push.close()
+        finally:
+            test_server.push_offline_every = 0
+
     async def test_oauth_client(self) -> None:
         async def access_token() -> str:
             return "my_access_token"
