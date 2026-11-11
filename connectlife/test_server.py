@@ -4,7 +4,7 @@ import datetime as dt
 import functools
 import hashlib
 import hmac
-from random import randrange
+from random import choice, randrange
 
 from aiohttp import web
 from yarl import URL
@@ -38,6 +38,12 @@ partial_status_rate = 0
 auth_error_rate = 0
 auth_error_type = "invalid_login"
 reject_tokens = False
+# Open push WebSockets, and seconds after which the server drops each one (0: never).
+push_sockets: set[web.WebSocketResponse] = set()
+push_close_after = 0
+# Seconds between taking a random device offline, and bringing it back online, over push (0: never).
+push_offline_every = 0
+PUSH_CHANNEL = "test-channel"
 
 LOGIN_ERRORS = {
     "invalid_login": {
@@ -190,7 +196,90 @@ async def property_set(request):
     for key in properties:
         if key in appliance["statusList"]:
             appliance["statusList"][key] = properties[key]
+    # Like the cloud, push the new status a moment after the write.
+    asyncio.get_running_loop().call_later(1, lambda: asyncio.ensure_future(_push_status(appliance)))
     return _gateway_ok()
+
+# -- Push (WebSocket) ------------------------------------------------------
+
+async def push_register(request):  # noqa: ARG001
+    return _gateway_ok()
+
+async def push_channels(request):
+    port = request.url.port
+    return _gateway_ok({
+        "pushServerIp": request.url.host,
+        "pushServerPort": port,
+        "pushServerSslPort": port,
+        "pushChannels": [{"pushChannel": PUSH_CHANNEL}],
+        "hbInterval": 40,
+        "hbFailTimes": 3,
+        "msgList": [],
+    })
+
+def _push_message(msg_type: str, content: dict) -> str:
+    """Encode like the cloud: base64 of JSON, with the content as a JSON string."""
+    message = {"formatId": 3, "msgTypeCode": msg_type, "content": json.dumps(content), "msgLevel": 2}
+    return base64.b64encode(json.dumps(message).encode()).decode()
+
+async def _push_status(appliance):
+    if not push_sockets:
+        return
+    content = {
+        "puid": appliance["puid"],
+        "deviceid": appliance["deviceId"],
+        "status": "",
+        "properties": dict(appliance["statusList"]),
+    }
+    message = _push_message("status_devicestatus", content)
+    print(f"Pushed status of {appliance['deviceId']} to {len(push_sockets)} connection(s)", flush=True)
+    for ws in list(push_sockets):
+        if not ws.closed:
+            await ws.send_str(message)
+
+async def _push_offline_flaps(ws):
+    """Every push_offline_every seconds, take a random device offline, and bring it back online the next time."""
+    offline = None
+    while not ws.closed:
+        await asyncio.sleep(push_offline_every)
+        if offline is None:
+            if not appliances:
+                continue
+            offline = choice(list(appliances.values()))
+            online = False
+        else:
+            online = True
+        # Polls report the same state.
+        offline["offlineState"] = 1 if online else 0
+        content = {"data": {"deviceId": offline["puid"], "online": "1" if online else "0"}}
+        print(f"Pushed {offline['deviceId']} {'online' if online else 'offline'}", flush=True)
+        if not ws.closed:
+            await ws.send_str(_push_message("iot_devicestate_change", content))
+        if online:
+            offline = None
+
+async def push_websocket(request):
+    if request.match_info["channel"] != PUSH_CHANNEL or request.query.get("token") != "my_access_token":
+        return web.Response(status=403)
+    ws = web.WebSocketResponse()
+    await ws.prepare(request)
+    push_sockets.add(ws)
+    print(f"Push connection opened ({len(push_sockets)} open)", flush=True)
+    closer = None
+    if push_close_after:
+        closer = asyncio.get_running_loop().call_later(push_close_after, lambda: asyncio.ensure_future(ws.close()))
+    flapper = asyncio.ensure_future(_push_offline_flaps(ws)) if push_offline_every else None
+    try:
+        async for _ in ws:
+            pass  # clients don't send anything; pings are answered by aiohttp
+    finally:
+        push_sockets.discard(ws)
+        if closer:
+            closer.cancel()
+        if flapper:
+            flapper.cancel()
+        print(f"Push connection closed ({len(push_sockets)} open)", flush=True)
+    return ws
 
 async def air_duct_energy(request):
     req = await request.json()
@@ -433,8 +522,7 @@ async def trir_device_tab_list(request):  # noqa: ARG001
     })
 
 
-def main(args):
-    directory = args.directory
+def load_dumps(directory):
     filenames = list(filter(lambda f: f[-5:] == ".json", [f for f in listdir(directory) if isfile(join(directory, f))]))
     for filename in filenames:
         with (open(join(directory, filename)) as f):
@@ -452,6 +540,8 @@ def main(args):
             appliance["deviceNickName"] = f'{appliance["deviceNickName"]} ({appliance["deviceTypeCode"]}-{feature})'
             appliances[appliance["puid"]] = appliance
 
+
+def create_app():
     app = web.Application()
     app.add_routes([web.post('/accounts.login', login)])
     app.add_routes([web.post('/accounts.getJWT', get_jwt)])
@@ -467,11 +557,19 @@ def main(args):
     app.add_routes([web.post('/clife-svc/pu/query_system_data', juapi(query_system_data))])
     app.add_routes([web.post('/basic/self_check/info', juapi(self_check))])
     app.add_routes([web.post('/clife-svc/pu/get_hour_power', juapi(hour_power))])
+    app.add_routes([web.post('/msg/registerPhoneDevice', push_register)])
+    app.add_routes([web.get('/msg/get_msg_and_channels', push_channels)])
+    app.add_routes([web.get('/ws/{channel}', push_websocket)])
     # TRIR (Russia/CIS) backend. property/set and air_duct_energy are shared.
     app.add_routes([web.post('/account/acc/login_pwd', trir_login)])
     app.add_routes([web.post('/account/acc/refresh_token', trir_refresh_token)])
     app.add_routes([web.post('/br/getDeviceTabList', trir_device_tab_list)])
-    web.run_app(app, port=args.port)
+    return app
+
+
+def main(args):
+    load_dumps(args.directory)
+    web.run_app(create_app(), port=args.port)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='ConnectLife API test server')
@@ -480,6 +578,8 @@ if __name__ == '__main__':
     parser.add_argument('-a', '--auth_error_rate', type=int, default=0, help='Auth error rate in %% for login')
     parser.add_argument('--auth_error_type', choices=list(LOGIN_ERRORS.keys()), default='invalid_login', help='Type of auth error to simulate')
     parser.add_argument('--reject_tokens', action='store_true', help='Reject access tokens when getting appliances, forcing a re-login')
+    parser.add_argument('--push_close_after', type=int, default=0, help='Drop each push WebSocket after this many seconds')
+    parser.add_argument('--push_offline_every', type=int, default=0, help='Push a random device offline, then online again, every this many seconds')
     parser.add_argument('-f', '--failure_rate', type=int, default=0, help='Failure rate in %% for get appliances')
     parser.add_argument('-t', '--timeout_rate', type=int, default=0, help='Timeout rate in %% for get appliances')
     parser.add_argument('--missing_rate', type=int, default=0, help='Rate in %% per appliance of leaving it out of get appliances')
@@ -489,6 +589,8 @@ if __name__ == '__main__':
     auth_error_rate = args.auth_error_rate
     auth_error_type = args.auth_error_type
     reject_tokens = args.reject_tokens
+    push_close_after = args.push_close_after
+    push_offline_every = args.push_offline_every
     failure_rate = args.failure_rate
     timeout_rate = args.timeout_rate
     missing_rate = args.missing_rate

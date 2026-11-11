@@ -1,10 +1,12 @@
 import logging
 import datetime as dt
 import re
+from collections.abc import Mapping
 from enum import StrEnum
 from typing import Dict
 
 _LOGGER = logging.getLogger(__name__)
+_MISSING = object()
 
 
 class DeviceType(StrEnum):
@@ -145,7 +147,31 @@ class ConnectLifeAppliance:
 
     @property
     def offline_state(self) -> int:
+        """1 when the device is online, 0 when it's offline."""
         return self._offline_state
+
+    def update_status(self, properties: Mapping[str, str | int | float]) -> set[str]:
+        """Merge status properties, e.g. from a push (connectlife.push.PushStatus); return the names of those that changed.
+
+        Properties missing from ``properties`` are kept: a push has the full status, and a missing property is more
+        likely left out than gone.
+        """
+        changed: set[str] = set()
+        for key, raw in properties.items():
+            value = convert(raw)
+            if self._status_list.get(key, _MISSING) != value:
+                self._status_list[key] = value
+                changed.add(key)
+        if properties:
+            self._status_list_cached = False
+        return changed
+
+    def update_online(self, online: bool) -> bool:
+        """Set whether the device is online, e.g. from a push (connectlife.push.PushOnline); return whether it changed."""
+        state = 1 if online else 0
+        changed = self._offline_state != state
+        self._offline_state = state
+        return changed
 
     @property
     def seq(self) -> int:

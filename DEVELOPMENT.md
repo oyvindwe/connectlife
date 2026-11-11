@@ -50,6 +50,8 @@ Options:
 | `--missing_rate`          | `0`             | Percentage per appliance of leaving it out of an appliance fetch.   |
 | `--no_status_rate`        | `0`             | Percentage per appliance of sending it without its `statusList`.    |
 | `--partial_status_rate`   | `0`             | Percentage per appliance of sending about half of its `statusList`. |
+| `--push_close_after`      | `0`             | Drop each push WebSocket after this many seconds (`0`: never).      |
+| `--push_offline_every`    | `0`             | Every this many seconds, push a device offline or back online.      |
 
 To simulate an account that must accept updated Terms & Conditions, reject every login with
 `Account Pending Registration`. Add `--reject_tokens` to also reject access tokens when fetching appliances, which
@@ -57,6 +59,10 @@ forces a re-login while already running:
 ```bash
 uv run python -m connectlife.test_server -a 100 --auth_error_type pending_registration --reject_tokens
 ```
+
+Push updates (`connectlife.push`) are served too: a second after each property update, the server pushes the
+device's full status to every open push WebSocket. Use `--push_close_after` to test reconnecting, and `--push_offline_every` to test devices going offline and
+online.
 
 Energy statistics, static data, system data, self-check, hourly power and the property list return
 canned responses for every appliance, not data from the dumps.

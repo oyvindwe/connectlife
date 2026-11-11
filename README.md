@@ -111,6 +111,27 @@ third-party API (`juapi-3rd.hijuconn.com`), except energy statistics, which it d
 go to the app gateway with the same token. If the API rejects the token twice,
 `LifeConnectAuthError` is raised and the sign-in should be repeated. Persist the `source_id`.
 
+## Push updates (experimental)
+
+`ConnectLifePush` receives a device's full status over a WebSocket within seconds of a change, with the password
+login (`ConnectLifeApi`). Keep the phone code between runs: each new one registers another client on the account.
+
+```python
+from connectlife.push import ConnectLifePush, PushConnected, PushOnline, PushStatus
+
+push = ConnectLifePush(api, phone_code)
+async for event in push.listen():
+    if isinstance(event, PushConnected):
+        ...  # fetch the appliances now; pushes from here on are newer
+    elif isinstance(event, PushStatus):
+        ...  # event.puid, event.properties: the full status, like statusList
+    elif isinstance(event, PushOnline):
+        ...  # event.puid, event.online
+```
+
+`listen()` ends when the connection is lost (or on `close()`), and raises if setting it up fails; reconnecting is up
+to the caller.
+
 ## Test server
 
 To use the test server to support developing the Home Assistant integration, clone this repo and see
